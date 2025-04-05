@@ -5,6 +5,10 @@ authors = ["AMD Research & Advanced Development"]
 edition = "2021"
 
 [dependencies]
+petgraph = "0.7.1"
+indexmap = "2.0.0"
+tempfile = "3.19.1"
+derive_more = { version = "2", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 ndarray = "0.16.1"
 num-traits = "0.2"

@@ -1,161 +1,172 @@
 // Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-use arbolta::bit::Bit;
-use arbolta::cell::{Cell, Function};
-use arbolta::module::hardware_module::{Component, HardwareModule};
-use arbolta::module::port::{Port, PortDirection};
+use arbolta::hardware_module::HardwareModule;
 use arbolta::signal::Signal;
+
 use once_cell::sync::Lazy;
 use rstest::rstest;
+use yosys_netlist_json as yosys;
 
 static VARIABLE_ALPHABET: Lazy<Vec<String>> = Lazy::new(|| {
-  (b'a'..=b'z')
+  (b'A'..=b'Z')
     .map(|x| String::from_utf8(vec![x]).unwrap())
     .collect()
 });
 
-fn cell_module_from_function(function: Function, num_inputs: usize) -> HardwareModule {
-  let mut cell_inputs_connections = [0; 8];
-  let mut module = HardwareModule::default();
+fn generate_module(cell_type: &str, num_inputs: usize) -> HardwareModule {
+  let mut module = yosys::Module::default();
+  let mut cell = yosys::Cell::default();
+  cell.cell_type = cell_type.to_string();
 
-  for i in 0..num_inputs {
-    module.signals.push(Signal::new_net(i));
-    module.ports.insert(
-      VARIABLE_ALPHABET[i].clone(),
-      Port {
-        signal_idx_list: vec![i],
-        shape: [1, 1],
-        direction: PortDirection::Input,
-        signed: false,
-      },
-    );
+  let net_offset = 2; // Offset constants
+  for net in 0..num_inputs {
+    let name = &VARIABLE_ALPHABET[net];
+    let bitval = yosys::BitVal::N(net + net_offset);
+    let mut netname = yosys::Netname::default();
+    netname.bits.push(bitval);
 
-    cell_inputs_connections[i] = i;
+    let port = yosys::Port {
+      direction: yosys::PortDirection::Input,
+      bits: vec![bitval],
+      offset: Default::default(),
+      upto: Default::default(),
+      signed: Default::default(),
+    };
+
+    cell.connections.insert(name.to_string(), port.bits.clone());
+    cell
+      .port_directions
+      .insert(name.to_string(), port.direction);
+    module.ports.insert(name.to_string(), port);
+    module.netnames.insert(name.to_string(), netname);
   }
-  module.signals.push(Signal::new_net(num_inputs));
-  module.ports.insert(
-    VARIABLE_ALPHABET[num_inputs].clone(),
-    Port {
-      signal_idx_list: vec![num_inputs],
-      shape: [1, 1],
-      direction: PortDirection::Output,
-      signed: false,
-    },
-  );
 
-  module.components.push(Component::Cell(Cell {
-    name: String::new(),
-    function,
-    state: [Bit::Zero; 2],
-    input_connections: cell_inputs_connections,
-    output_connection: num_inputs,
-    num_inputs,
-  }));
+  let bitval = yosys::BitVal::N(num_inputs + net_offset);
+  let mut netname = yosys::Netname::default();
+  netname.bits.push(bitval);
 
-  module
+  let port = yosys::Port {
+    direction: yosys::PortDirection::Output,
+    bits: vec![bitval],
+    offset: Default::default(),
+    upto: Default::default(),
+    signed: Default::default(),
+  };
+
+  cell.connections.insert("Y".to_string(), port.bits.clone());
+  cell.port_directions.insert("Y".to_string(), port.direction);
+  module.ports.insert("Y".to_string(), port);
+  module.netnames.insert("Y".to_string(), netname);
+
+  module.cells.insert(cell_type.to_string(), cell);
+
+  let mut netlist = yosys::Netlist::default();
+  netlist.modules.insert(cell_type.to_string(), module);
+
+  HardwareModule::new(netlist, cell_type).unwrap()
 }
 
 #[rstest]
-#[case(Function::Inverter, 0, 1)]
-#[case(Function::Inverter, 1, 0)]
-#[case(Function::Buf, 0, 0)]
-#[case(Function::Buf, 1, 1)]
-fn test_module_1_input_cell(#[case] function: Function, #[case] a: u8, #[case] expected: u8) {
-  let mut cell_module = cell_module_from_function(function, 1);
-  cell_module.set_port_int("a", a).unwrap();
+#[case("NOT", 0, 1)]
+#[case("NOT", 1, 0)]
+#[case("BUF", 0, 0)]
+#[case("BUF", 1, 1)]
+fn test_module_1_input_cell(#[case] cell_type: &str, #[case] a: u8, #[case] expected: u8) {
+  let mut cell_module = generate_module(cell_type, 1);
+  cell_module.set_port_int("A", a).unwrap();
   cell_module.eval();
 
-  let actual: u8 = cell_module.get_port_int("b").unwrap();
+  let actual: u8 = cell_module.get_port_int("Y").unwrap();
   assert_eq!(actual, expected);
 }
 
 #[rstest]
-#[case(Function::And, 0, 0, 0)]
-#[case(Function::And, 0, 1, 0)]
-#[case(Function::And, 1, 0, 0)]
-#[case(Function::And, 1, 1, 1)]
-#[case(Function::Nor, 0, 0, 1)]
-#[case(Function::Nor, 0, 1, 0)]
-#[case(Function::Nor, 1, 0, 0)]
-#[case(Function::Nor, 1, 1, 0)]
-#[case(Function::Nand, 0, 0, 1)]
-#[case(Function::Nand, 0, 1, 1)]
-#[case(Function::Nand, 1, 0, 1)]
-#[case(Function::Nand, 1, 1, 0)]
-#[case(Function::Or, 0, 0, 0)]
-#[case(Function::Or, 0, 1, 1)]
-#[case(Function::Or, 1, 0, 1)]
-#[case(Function::Or, 1, 1, 1)]
-#[case(Function::Xor, 0, 0, 0)]
-#[case(Function::Xor, 0, 1, 1)]
-#[case(Function::Xor, 1, 0, 1)]
-#[case(Function::Xor, 1, 1, 0)]
-#[case(Function::Xnor, 0, 0, 1)]
-#[case(Function::Xnor, 0, 1, 0)]
-#[case(Function::Xnor, 1, 0, 0)]
-#[case(Function::Xnor, 1, 1, 1)]
+#[case("AND", 0, 0, 0)]
+#[case("AND", 0, 1, 0)]
+#[case("AND", 1, 0, 0)]
+#[case("AND", 1, 1, 1)]
+#[case("NOR", 0, 0, 1)]
+#[case("NOR", 0, 1, 0)]
+#[case("NOR", 1, 0, 0)]
+#[case("NOR", 1, 1, 0)]
+#[case("NAND", 0, 0, 1)]
+#[case("NAND", 0, 1, 1)]
+#[case("NAND", 1, 0, 1)]
+#[case("NAND", 1, 1, 0)]
+#[case("OR", 0, 0, 0)]
+#[case("OR", 0, 1, 1)]
+#[case("OR", 1, 0, 1)]
+#[case("OR", 1, 1, 1)]
+#[case("XOR", 0, 0, 0)]
+#[case("XOR", 0, 1, 1)]
+#[case("XOR", 1, 0, 1)]
+#[case("XOR", 1, 1, 0)]
+#[case("XNOR", 0, 0, 1)]
+#[case("XNOR", 0, 1, 0)]
+#[case("XNOR", 1, 0, 0)]
+#[case("XNOR", 1, 1, 1)]
 fn test_module_2_input_cell(
-  #[case] function: Function,
+  #[case] cell_type: &str,
   #[case] a: u8,
   #[case] b: u8,
   #[case] expected: u8,
 ) {
-  let mut cell_module = cell_module_from_function(function, 2);
-  cell_module.set_port_int("a", a).unwrap();
-  cell_module.set_port_int("b", b).unwrap();
+  let mut cell_module = generate_module(cell_type, 2);
+  cell_module.set_port_int("A", a).unwrap();
+  cell_module.set_port_int("B", b).unwrap();
   cell_module.eval();
 
-  let actual: u8 = cell_module.get_port_int("c").unwrap();
+  let actual: u8 = cell_module.get_port_int("Y").unwrap();
   assert_eq!(actual, expected);
 }
 
 #[rstest]
-#[case(Function::Or, 0, 0, 0, 0)]
-#[case(Function::Or, 0, 0, 1, 1)]
-#[case(Function::Or, 0, 1, 0, 1)]
-#[case(Function::Or, 0, 1, 1, 1)]
-#[case(Function::Or, 1, 0, 0, 1)]
-#[case(Function::Or, 1, 0, 1, 1)]
-#[case(Function::Or, 1, 1, 0, 1)]
-#[case(Function::Or, 1, 1, 1, 1)]
+#[case("OR", 0, 0, 0, 0)]
+#[case("OR", 0, 0, 1, 1)]
+#[case("OR", 0, 1, 0, 1)]
+#[case("OR", 0, 1, 1, 1)]
+#[case("OR", 1, 0, 0, 1)]
+#[case("OR", 1, 0, 1, 1)]
+#[case("OR", 1, 1, 0, 1)]
+#[case("OR", 1, 1, 1, 1)]
 fn test_module_3_input_cell(
-  #[case] function: Function,
+  #[case] cell_type: &str,
   #[case] a: u8,
   #[case] b: u8,
   #[case] c: u8,
   #[case] expected: u8,
 ) {
-  let mut cell_module = cell_module_from_function(function, 3);
-  cell_module.set_port_int("a", a).unwrap();
-  cell_module.set_port_int("b", b).unwrap();
-  cell_module.set_port_int("c", c).unwrap();
+  let mut cell_module = generate_module(cell_type, 3);
+  cell_module.set_port_int("A", a).unwrap();
+  cell_module.set_port_int("B", b).unwrap();
+  cell_module.set_port_int("C", c).unwrap();
   cell_module.eval();
 
-  let actual: u8 = cell_module.get_port_int("d").unwrap();
+  let actual: u8 = cell_module.get_port_int("Y").unwrap();
   assert_eq!(actual, expected);
 }
 
-#[rstest]
-#[case(Function::DffPosEdge, 0, 0)]
-#[case(Function::DffPosEdge, 1, 1)]
-fn test_module_1_input_cell_clocked(
-  #[case] function: Function,
-  #[case] a: u8,
-  #[case] expected: u8,
-) {
-  let mut cell_module = cell_module_from_function(function, 2);
+// #[rstest]
+// #[case(Function::DffPosEdge, 0, 0)]
+// #[case(Function::DffPosEdge, 1, 1)]
+// fn test_module_1_input_cell_clocked(
+//   #[case] function: Function,
+//   #[case] a: u8,
+//   #[case] expected: u8,
+// ) {
+//   let mut cell_module = cell_module_from_function(function, 2);
 
-  cell_module.set_port_int("a", 0).unwrap(); // clock
-  cell_module.set_port_int("b", a).unwrap();
-  cell_module.eval();
+//   cell_module.set_port_int("a", 0).unwrap(); // clock
+//   cell_module.set_port_int("b", a).unwrap();
+//   cell_module.eval();
 
-  cell_module.set_port_int("a", 1).unwrap();
-  cell_module.eval();
+//   cell_module.set_port_int("a", 1).unwrap();
+//   cell_module.eval();
 
-  cell_module.set_port_int("a", 0).unwrap();
-  cell_module.eval();
+//   cell_module.set_port_int("a", 0).unwrap();
+//   cell_module.eval();
 
-  let actual: u8 = cell_module.get_port_int("c").unwrap();
-  assert_eq!(actual, expected);
-}
+//   let actual: u8 = cell_module.get_port_int("Y").unwrap();
+//   assert_eq!(actual, expected);
+// }

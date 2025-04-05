@@ -2,22 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 use arbolta::bit::Bit;
-use arbolta::signal::{AccessSignal, Signal};
+use arbolta::signal::Signal;
 
 #[test]
 fn test_signal_net_init() {
-  let x = Signal::new_net(0);
+  let x = Signal::default();
 
   assert_eq!(x.get_value(), Bit::Zero);
   assert_eq!(x.get_toggle_count_falling(), 0);
   assert_eq!(x.get_toggle_count_rising(), 0);
   assert_eq!(x.get_total_toggle_count(), 0);
-  assert_eq!(x.get_index(), 0);
 }
 
 #[test]
 fn test_signal_net_set_value() {
-  let mut x = Signal::new_net(0);
+  let mut x = Signal::default();
 
   assert_eq!(x.get_value(), Bit::Zero);
   x.set_value(Bit::One);
@@ -26,7 +25,7 @@ fn test_signal_net_set_value() {
 
 #[test]
 fn test_signal_net_toggle_rising() {
-  let mut x = Signal::new_net(0);
+  let mut x = Signal::default();
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);
@@ -41,7 +40,8 @@ fn test_signal_net_toggle_rising() {
 
 #[test]
 fn test_signal_net_toggle_falling() {
-  let mut x = Signal::new_net_from(0, Bit::One);
+  let mut x = Signal::default();
+  x.value = Bit::One;
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);
@@ -56,7 +56,7 @@ fn test_signal_net_toggle_falling() {
 
 #[test]
 fn test_signal_net_toggle_same_zero() {
-  let mut x = Signal::new_net(0);
+  let mut x = Signal::default();
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);
@@ -71,7 +71,8 @@ fn test_signal_net_toggle_same_zero() {
 
 #[test]
 fn test_signal_net_toggle_same_one() {
-  let mut x = Signal::new_net_from(0, Bit::One);
+  let mut x = Signal::default();
+  x.value = Bit::One;
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);

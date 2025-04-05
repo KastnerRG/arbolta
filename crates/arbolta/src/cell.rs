@@ -1,270 +1,562 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
-// SPDX-License-Identifier: MIT
-
 use crate::bit::Bit;
-use crate::signal::{AccessSignal, SignalIndex, SignalList};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use crate::signal::Signal;
+use derive_more::Constructor;
+use indexmap::IndexMap;
+use std::fmt::Debug;
 use thiserror::Error;
-
-pub const CONNECTION_SIZE: usize = 8;
-pub const STATE_SIZE: usize = 2;
-
-/// Basic logic gate functions.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub enum Function {
-  Inverter,
-  And,
-  Nor,
-  Nand,
-  Xor,
-  Xnor,
-  Or,
-  DffPosEdge,
-  Buf,
-}
-
-/// Proxy for entry in a Liberty Cell Library.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CellInfo {
-  pub name: String,
-  pub function: Function,
-  pub area: f64,
-  pub num_inputs: usize,
-}
+use yosys_netlist_json as yosys;
 
 /// Proxy for a standard-cell and basic unit of 'compute'.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct Cell {
-  /// Name of cell.
-  pub name: String,
-  /// Cell's function.
-  pub function: Function,
-  /// For storing cell state (ex, last clock value).
-  pub state: [Bit; STATE_SIZE],
-  /// Number of inputs the cell has.
-  pub num_inputs: usize,
-  /// Input signal indices.
-  pub input_connections: [SignalIndex; CONNECTION_SIZE], // Put this on stack
-  /// Output signal index.
-  pub output_connection: SignalIndex,
+pub type Cell = Box<dyn CellFn>;
+
+pub trait CellFn: Debug + Send + Sync {
+  fn eval(&mut self, signals: &mut [Signal]);
+  fn reset(&mut self);
+  fn input_connections(&self) -> Vec<&usize>;
+  fn output_connections(&self) -> Vec<&usize>;
+  fn clone_box(&self) -> Cell;
 }
 
 #[derive(Debug, Error)]
 pub enum CellError {
-  #[error("couldn't find cell `{0}`")]
-  NotFound(String),
+  #[error("unsupported cell `{0}`")]
+  Unsupported(String),
 }
 
-impl From<&CellInfo> for Cell {
-  fn from(value: &CellInfo) -> Self {
-    Self {
-      name: value.name.clone(),
-      function: value.function.clone(),
-      state: [Bit::Zero; STATE_SIZE],
-      num_inputs: value.num_inputs,
-      input_connections: [0; CONNECTION_SIZE],
-      output_connection: 0,
-    }
+impl Default for Cell {
+  fn default() -> Self {
+    Box::new(NoneCell)
   }
 }
 
-impl From<CellInfo> for Cell {
-  fn from(value: CellInfo) -> Self {
-    Cell::from(&value)
+impl Clone for Cell {
+  fn clone(&self) -> Self {
+    self.clone_box()
   }
 }
 
-/// Proxy for a Liberty Cell Library
-/// User can define their own cells
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CellLibrary {
-  pub cells: HashMap<String, CellInfo>,
-}
+/// Generate a cell given its Yosys netlist description
+/// # Arguments
+/// * `cell` - Yosys cell
+pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
+  let mut input_connections: IndexMap<String, Vec<usize>> = IndexMap::new();
+  let mut output_connections: IndexMap<String, Vec<usize>> = IndexMap::new();
 
-impl CellLibrary {
-  /// Generate a cell given its name
-  /// # Arguments
-  /// * `cell_name` - Name of cell to generate
-  pub fn generate_cell(&self, cell_name: &str) -> Result<Cell, CellError> {
-    match self.cells.get(cell_name) {
-      Some(cell_info) => Ok(Cell::from(cell_info)),
-      None => Err(CellError::NotFound(cell_name.to_string())),
-    }
-  }
-
-  pub fn get_cell_area(&self, cell_name: &str) -> Result<f64, CellError> {
-    match self.cells.get(cell_name) {
-      Some(cell_info) => Ok(cell_info.area),
-      None => Err(CellError::NotFound(cell_name.to_string())),
-    }
-  }
-
-  pub fn get_cell_breakdown_area(
-    &self,
-    breakdown: &HashMap<String, usize>,
-  ) -> Result<f64, CellError> {
-    let mut total_area: f64 = 0.0;
-    for (cell_name, count) in breakdown {
-      total_area += (*count as f64) * self.get_cell_area(cell_name)?;
-    }
-
-    Ok(total_area)
-  }
-}
-
-impl Cell {
-  pub fn empty_from_function(function: Function) -> Self {
-    Self {
-      name: String::new(),
-      function,
-      state: [Bit::Zero; STATE_SIZE],
-      num_inputs: 0,
-      input_connections: [0; CONNECTION_SIZE],
-      output_connection: 0,
-    }
-  }
-
-  pub fn eval(&mut self, signals: &mut SignalList) {
-    let mut output_bit: Bit;
-
-    match &self.function {
-      Function::Buf => {
-        output_bit = signals[self.input_connections[0]].get_value();
-      }
-      Function::Inverter => {
-        output_bit = !signals[self.input_connections[0]].get_value();
-      }
-      Function::And => {
-        output_bit = signals[self.input_connections[0]].get_value();
-        for bit in self.input_connections[1..self.num_inputs]
-          .iter()
-          .map(|i| signals[*i].get_value())
-        {
-          output_bit = output_bit & bit;
-        }
-      }
-      Function::Or => {
-        output_bit = signals[self.input_connections[0]].get_value();
-        for bit in self.input_connections[1..self.num_inputs]
-          .iter()
-          .map(|i| signals[*i].get_value())
-        {
-          output_bit = output_bit | bit;
-        }
-      }
-      Function::Nor => {
-        output_bit = signals[self.input_connections[0]].get_value();
-        for bit in self.input_connections[1..self.num_inputs]
-          .iter()
-          .map(|i| signals[*i].get_value())
-        {
-          output_bit = output_bit | bit;
-        }
-        output_bit = !output_bit;
-      }
-      Function::Nand => {
-        output_bit = signals[self.input_connections[0]].get_value();
-        for bit in self.input_connections[1..self.num_inputs]
-          .iter()
-          .map(|i| signals[*i].get_value())
-        {
-          output_bit = output_bit & bit;
-        }
-        output_bit = !output_bit;
-      }
-      Function::Xor => {
-        output_bit = signals[self.input_connections[0]].get_value();
-        for bit in self.input_connections[1..self.num_inputs]
-          .iter()
-          .map(|i| signals[*i].get_value())
-        {
-          output_bit = output_bit ^ bit;
-        }
-      }
-      Function::Xnor => {
-        output_bit = signals[self.input_connections[0]].get_value();
-        for bit in self.input_connections[1..self.num_inputs]
-          .iter()
-          .map(|i| signals[*i].get_value())
-        {
-          output_bit = output_bit ^ bit;
-        }
-        output_bit = !output_bit;
-      }
-      Function::DffPosEdge => {
-        let (clock, data) = (
-          signals[self.input_connections[0]].get_value(),
-          signals[self.input_connections[1]].get_value(),
-        );
-        let (last_data, last_clock) = (self.state[0], self.state[1]);
-        // Detect rising edge, clock new data
-        output_bit = if clock == Bit::One && last_clock == Bit::Zero {
-          data
-        } else {
-          last_data
-        };
-        self.state = [output_bit, clock];
-      }
+  for (port_name, port_bits) in cell.connections.iter() {
+    // Skip ports with no direction
+    let Some(direction) = cell.port_directions.get(port_name) else {
+      continue;
     };
-    signals[self.output_connection].set_value(output_bit);
+
+    if *direction == yosys::PortDirection::InOut {
+      todo!("Inout not supported.")
+    };
+
+    for bit in port_bits {
+      let net = match bit {
+        yosys::BitVal::N(net) => *net,
+        yosys::BitVal::S(constant) => match constant {
+          yosys::SpecialBit::_0 => 0, // Global 0
+          yosys::SpecialBit::_1 => 1, // Global 1
+          yosys::SpecialBit::X => todo!("X not supported."),
+          yosys::SpecialBit::Z => todo!("Z not supported."),
+        },
+      };
+
+      if *direction == yosys::PortDirection::Input {
+        input_connections
+          .entry(port_name.to_string())
+          .or_default()
+          .push(net);
+      } else {
+        output_connections
+          .entry(port_name.to_string())
+          .or_default()
+          .push(net);
+      }
+    }
   }
 
-  pub fn reset(&mut self) {
-    if self.function == Function::DffPosEdge {
-      self.state = [Bit::Zero; 2]
+  let new_cell: Cell = match cell.cell_type.as_str() {
+    "BUF" => Box::new(Buf::new(
+      input_connections["A"][0],
+      output_connections["Y"][0],
+    )),
+    "NOT" => Box::new(Inverter::new(
+      input_connections["A"][0],
+      output_connections["Y"][0],
+    )),
+    "$_NAND_" | "NAND" => Box::new(Nand::new(
+      input_connections
+        .into_values()
+        .flatten()
+        .collect::<Vec<usize>>()
+        .into_boxed_slice(),
+      output_connections["Y"][0],
+    )),
+    "OR" | "$_OR_" => Box::new(Or::new(
+      input_connections
+        .into_values()
+        .flatten()
+        .collect::<Vec<usize>>()
+        .into_boxed_slice(),
+      output_connections["Y"][0],
+    )),
+    "ORNOT" | "$_ORNOT_" => Box::new(OrNot::new(
+      input_connections
+        .into_values()
+        .flatten()
+        .collect::<Vec<usize>>()
+        .into_boxed_slice(),
+      output_connections["Y"][0],
+    )),
+    "$_NOR_" | "NOR" => Box::new(Nor::new(
+      input_connections
+        .into_values()
+        .flatten()
+        .collect::<Vec<usize>>()
+        .into_boxed_slice(),
+      output_connections["Y"][0],
+    )),
+    "XOR" | "$_XOR_" => Box::new(Xor::new(
+      input_connections
+        .into_values()
+        .flatten()
+        .collect::<Vec<usize>>()
+        .into_boxed_slice(),
+      output_connections["Y"][0],
+    )),
+    "$_XNOR_" | "XNOR" => Box::new(Xnor::new(
+      input_connections
+        .into_values()
+        .flatten()
+        .collect::<Vec<usize>>()
+        .into_boxed_slice(),
+      output_connections["Y"][0],
+    )),
+    "AND" | "$_AND_" => Box::new(And::new(
+      input_connections
+        .into_values()
+        .flatten()
+        .collect::<Vec<usize>>()
+        .into_boxed_slice(),
+      output_connections["Y"][0],
+    )),
+    "ANDNOT" | "$_ANDNOT_" => Box::new(AndNot::new(
+      input_connections
+        .into_values()
+        .flatten()
+        .collect::<Vec<usize>>()
+        .into_boxed_slice(),
+      output_connections["Y"][0],
+    )),
+    "$_SDFF_PP0_" => Box::new(DffPosedgeReset::new(
+      input_connections["D"][0],
+      input_connections["C"][0],
+      input_connections["R"][0],
+      output_connections["Q"][0],
+    )),
+    _ => return Err(CellError::Unsupported(cell.cell_type.to_string())),
+  };
+
+  Ok(new_cell)
+}
+
+#[derive(Debug, Clone)]
+pub struct NoneCell;
+
+#[allow(unused_variables)]
+impl CellFn for NoneCell {
+  fn eval(&mut self, signals: &mut [Signal]) {} // Do nothing
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    vec![]
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct Inverter {
+  input_net: usize,
+  output_net: usize,
+}
+
+impl CellFn for Inverter {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(!signals[self.input_net].get_value());
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    vec![&self.input_net]
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct Buf {
+  input_net: usize,
+  output_net: usize,
+}
+
+impl CellFn for Buf {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(signals[self.input_net].get_value());
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    vec![&self.input_net]
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct Nand {
+  input_nets: Box<[usize]>,
+  output_net: usize,
+}
+
+impl CellFn for Nand {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(
+      !self
+        .input_nets
+        .iter()
+        .skip(1)
+        .fold(signals[self.input_nets[0]].get_value(), |acc, net| {
+          acc & signals[*net].get_value()
+        }),
+    );
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.input_nets.as_ref().iter().collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct And {
+  input_nets: Box<[usize]>,
+  output_net: usize,
+}
+
+impl CellFn for And {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(
+      self
+        .input_nets
+        .iter()
+        .skip(1)
+        .fold(signals[self.input_nets[0]].get_value(), |acc, net| {
+          acc & signals[*net].get_value()
+        }),
+    );
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.input_nets.as_ref().iter().collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct AndNot {
+  input_nets: Box<[usize]>,
+  output_net: usize,
+}
+
+impl CellFn for AndNot {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(self.input_nets.iter().rev().skip(1).fold(
+      !signals[*self.input_nets.last().unwrap()].get_value(),
+      |acc, net| acc & signals[*net].get_value(),
+    ));
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.input_nets.as_ref().iter().collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct Or {
+  input_nets: Box<[usize]>,
+  output_net: usize,
+}
+
+impl CellFn for Or {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(
+      self
+        .input_nets
+        .iter()
+        .skip(1)
+        .fold(signals[self.input_nets[0]].get_value(), |acc, net| {
+          acc | signals[*net].get_value()
+        }),
+    );
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.input_nets.as_ref().iter().collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct Nor {
+  input_nets: Box<[usize]>,
+  output_net: usize,
+}
+
+impl CellFn for Nor {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(
+      !self
+        .input_nets
+        .iter()
+        .skip(1)
+        .fold(signals[self.input_nets[0]].get_value(), |acc, net| {
+          acc | signals[*net].get_value()
+        }),
+    );
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.input_nets.as_ref().iter().collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct Xor {
+  input_nets: Box<[usize]>,
+  output_net: usize,
+}
+
+impl CellFn for Xor {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(
+      self
+        .input_nets
+        .iter()
+        .skip(1)
+        .fold(signals[self.input_nets[0]].get_value(), |acc, net| {
+          acc ^ signals[*net].get_value()
+        }),
+    );
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.input_nets.as_ref().iter().collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct Xnor {
+  input_nets: Box<[usize]>,
+  output_net: usize,
+}
+
+impl CellFn for Xnor {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(
+      !self
+        .input_nets
+        .iter()
+        .skip(1)
+        .fold(signals[self.input_nets[0]].get_value(), |acc, net| {
+          acc ^ signals[*net].get_value()
+        }),
+    );
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.input_nets.as_ref().iter().collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor)]
+pub struct OrNot {
+  input_nets: Box<[usize]>,
+  output_net: usize,
+}
+
+impl CellFn for OrNot {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    signals[self.output_net].set_value(self.input_nets.iter().rev().skip(1).fold(
+      !signals[*self.input_nets.last().unwrap()].get_value(),
+      |acc, net| acc | signals[*net].get_value(),
+    ));
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.input_nets.as_ref().iter().collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.output_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct DffPosedgeReset {
+  data_in_net: usize,
+  clock_net: usize,
+  reset_net: usize,
+  data_out_net: usize,
+  last_clock: Bit,
+  last_data: Bit,
+}
+
+impl DffPosedgeReset {
+  pub fn new(data_in_net: usize, clock_net: usize, reset_net: usize, data_out_net: usize) -> Self {
+    Self {
+      data_in_net,
+      clock_net,
+      reset_net,
+      data_out_net,
+      last_clock: Bit::Zero,
+      last_data: Bit::Zero,
     }
   }
 }
 
-pub fn default_cell_library() -> CellLibrary {
-  let cells = HashMap::from([
-    (
-      "BUF".to_string(),
-      CellInfo {
-        name: "BUF".to_string(),
-        function: Function::Buf,
-        area: 4.0,
-        num_inputs: 1,
-      },
-    ),
-    (
-      "NOT".to_string(),
-      CellInfo {
-        name: "NOT".to_string(),
-        function: Function::Inverter,
-        area: 2.0,
-        num_inputs: 1,
-      },
-    ),
-    (
-      "NAND".to_string(),
-      CellInfo {
-        name: "NAND".to_string(),
-        function: Function::Nand,
-        area: 4.0,
-        num_inputs: 2,
-      },
-    ),
-    (
-      "NOR".to_string(),
-      CellInfo {
-        name: "NOR".to_string(),
-        function: Function::Nor,
-        area: 4.0,
-        num_inputs: 2,
-      },
-    ),
-    (
-      "DFF".to_string(),
-      CellInfo {
-        name: "DFF".to_string(),
-        function: Function::DffPosEdge,
-        area: 8.0,
-        num_inputs: 2,
-      },
-    ),
-  ]);
+impl CellFn for DffPosedgeReset {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    let (data, clock, reset) = (
+      signals[self.data_in_net].get_value(),
+      signals[self.clock_net].get_value(),
+      signals[self.reset_net].get_value(),
+    );
 
-  CellLibrary { cells }
+    // Detect rising edge
+    let output_bit = if clock == Bit::One && self.last_clock == Bit::Zero {
+      match reset {
+        Bit::Zero => data,
+        Bit::One => Bit::Zero, // Do reset
+      }
+    } else {
+      self.last_data
+    };
+
+    signals[self.data_out_net].set_value(output_bit);
+    (self.last_data, self.last_clock) = (output_bit, clock);
+  }
+
+  fn reset(&mut self) {
+    self.last_clock = Bit::Zero;
+    self.last_data = Bit::Zero;
+  }
+
+  fn input_connections(&self) -> Vec<&usize> {
+    vec![&self.clock_net, &self.data_in_net, &self.reset_net]
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    vec![&self.data_out_net]
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
 }

@@ -9,7 +9,6 @@ use indexmap::{IndexMap, IndexSet};
 use ndarray::{Array1, ArrayView1};
 use num_traits::PrimInt;
 use petgraph::graph::{Graph, NodeIndex};
-use petgraph::visit::Topo;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::process::Command;
@@ -18,16 +17,18 @@ use thiserror::Error;
 use yosys_netlist_json as yosys;
 
 pub type CellGraph = Graph<Cell, usize>;
-pub type PortMap = IndexMap<String, Port>;
-pub type SignalMap = IndexMap<String, Box<[usize]>>;
+pub type PortMap = HashMap<String, Port>;
+pub type SignalMap = HashMap<String, Box<[usize]>>;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct HardwareModule {
   pub name: String,
   pub ports: PortMap,
   pub signal_map: SignalMap,
   pub signals: Box<[Signal]>,
   pub cells: Box<[Cell]>,
+  pub clock_net: Option<usize>, // TODO: Add polarity
+  pub reset_net: Option<usize>, // TODO: Add polarity
 }
 
 #[derive(Debug, Error)]
@@ -163,18 +164,22 @@ impl HardwareModule {
     signals[0].set_constant(Bit::Zero);
     signals[1].set_constant(Bit::One);
 
-    let mut search = Topo::new(&graph);
+    // let mut search = Topo::new(&graph);
+    let mut search = petgraph::visit::DfsPostOrder::new(&graph, input_node);
     let mut cells = vec![];
     while let Some(cell_node) = search.next(&graph) {
       cells.push(graph[cell_node].clone());
     }
+    cells.reverse();
 
     Ok(Self {
       name: top_module.to_string(),
       ports,
       signal_map,
       signals: signals.into_boxed_slice(),
-      cells: cells.into_boxed_slice(), // search,
+      cells: cells.into_boxed_slice(),
+      clock_net: None,
+      reset_net: None,
     })
   }
 
@@ -195,11 +200,58 @@ impl HardwareModule {
     }
   }
 
+  pub fn set_clock(&mut self, net: usize) -> Result<(), ModuleError> {
+    match self.signals.get(net) {
+      Some(_) => {
+        self.clock_net = Some(net);
+        Ok(())
+      }
+      None => Err(ModuleError::MissingNet(net)),
+    }
+  }
+
+  pub fn set_reset(&mut self, net: usize) -> Result<(), ModuleError> {
+    match self.signals.get(net) {
+      Some(_) => {
+        self.reset_net = Some(net);
+        Ok(())
+      }
+      None => Err(ModuleError::MissingNet(net)),
+    }
+  }
+
   pub fn eval(&mut self) {
     self
       .cells
       .iter_mut()
       .for_each(|cell| cell.eval(&mut self.signals));
+  }
+
+  pub fn eval_clocked(&mut self) -> Result<(), ModuleError> {
+    let Some(clock_net) = self.clock_net else {
+      return Err(ModuleError::MissingSignal("clock".to_string()));
+    };
+
+    self.eval();
+    self.signals[clock_net].set_value(Bit::One);
+    self.eval();
+    self.signals[clock_net].set_value(Bit::Zero);
+    self.eval();
+
+    Ok(())
+  }
+
+  pub fn eval_reset_clocked(&mut self) -> Result<(), ModuleError> {
+    let Some(reset_net) = self.reset_net else {
+      return Err(ModuleError::MissingSignal("reset".to_string()));
+    };
+
+    self.signals[reset_net].set_value(Bit::One);
+    self.eval_clocked()?;
+    self.signals[reset_net].set_value(Bit::Zero);
+    self.eval();
+
+    Ok(())
   }
 
   pub fn reset(&mut self) {

@@ -85,6 +85,22 @@ impl PyDesign {
     todo!()
   }
 
+  fn get_signal_map(&self) -> HashMap<String, Vec<usize>> {
+    self
+      .module
+      .signal_map
+      .iter()
+      .map(|(name, nets)| (name.to_string(), nets.to_vec()))
+      .collect()
+  }
+
+  pub fn stick_signal(&mut self, net: usize, val: bool) -> PyResult<()> {
+    match self.module.stick_signal(net, val.into()) {
+      Ok(()) => Ok(()),
+      Err(err) => Err(PyException::new_err(format!("{err}"))),
+    }
+  }
+
   #[allow(unused_variables)]
   fn set_clock(&mut self, name: &str) -> PyResult<()> {
     todo!()

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
 
@@ -243,6 +243,12 @@ class HardwareDesign:
             Module names.
         """
         return self.design.get_module_names()
+
+    def signal_map(self) -> Dict[str, List[int]]:
+        return self.design.get_signal_map()
+
+    def stick_signal(self, net: int, val: Union[int, bool]) -> None:
+        return self.design.stick_signal(net, bool(val))
 
 
 def save(file: str, design: HardwareDesign) -> None:

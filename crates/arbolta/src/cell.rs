@@ -79,11 +79,11 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
   }
 
   let new_cell: Cell = match cell.cell_type.as_str() {
-    "BUF" => Box::new(Buf::new(
+    "BUF" | "$_BUF_" => Box::new(Buf::new(
       input_connections["A"][0],
       output_connections["Y"][0],
     )),
-    "NOT" | "$_NOT_" => Box::new(Inverter::new(
+    "NOT" | "$_NOT_" | "$not" => Box::new(Inverter::new(
       input_connections["A"][0],
       output_connections["Y"][0],
     )),
@@ -213,6 +213,17 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
       cell.parameters["A_SIGNED"].to_number().unwrap() == 1,
       input_connections["A"].clone().into_boxed_slice(),
       input_connections["B"].clone().into_boxed_slice(),
+      output_connections["Y"].clone().into_boxed_slice(),
+    )),
+    "$logic_and" => Box::new(LogicAnd::new(
+      // Hacky, fix later
+      input_connections["A"].clone().into_boxed_slice(),
+      input_connections["B"].clone().into_boxed_slice(),
+      output_connections["Y"].clone().into_boxed_slice(),
+    )),
+    "$logic_not" => Box::new(LogicNot::new(
+      // Hacky, fix later
+      input_connections["A"].clone().into_boxed_slice(),
       output_connections["Y"].clone().into_boxed_slice(),
     )),
     _ => return Err(CellError::Unsupported(cell.cell_type.to_string())),
@@ -1076,6 +1087,90 @@ impl CellFn for Shl {
 
   fn input_connections(&self) -> Vec<&usize> {
     self.a_nets.iter().chain(self.b_nets.iter()).collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    self.y_nets.iter().collect()
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
+pub struct LogicAnd {
+  a_nets: Box<[usize]>,
+  b_nets: Box<[usize]>,
+  y_nets: Box<[usize]>,
+}
+
+impl CellFn for LogicAnd {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    let a = BitVec::from(
+      self
+        .a_nets
+        .iter()
+        .map(|net| signals[*net].get_value())
+        .collect::<Vec<Bit>>(),
+    );
+
+    let b = BitVec::from(
+      self
+        .b_nets
+        .iter()
+        .map(|net| signals[*net].get_value())
+        .collect::<Vec<Bit>>(),
+    );
+
+    // Hard code as u64 add, fix later
+    // Assume only need to set LSB
+    let a = Bit::from(a.to_int::<u64>() != 0);
+    let b = Bit::from(b.to_int::<u64>() != 0);
+    signals[self.y_nets[0]].set_value(a & b);
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.a_nets.iter().chain(self.b_nets.iter()).collect()
+  }
+
+  fn output_connections(&self) -> Vec<&usize> {
+    self.y_nets.iter().collect()
+  }
+
+  fn clone_box(&self) -> Cell {
+    Box::new(self.clone())
+  }
+}
+
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
+pub struct LogicNot {
+  a_nets: Box<[usize]>,
+  y_nets: Box<[usize]>,
+}
+
+impl CellFn for LogicNot {
+  fn eval(&mut self, signals: &mut [Signal]) {
+    let a = BitVec::from(
+      self
+        .a_nets
+        .iter()
+        .map(|net| signals[*net].get_value())
+        .collect::<Vec<Bit>>(),
+    );
+
+    // Hard code as u64 add, fix later
+    // Assume only need to set LSB
+    let a = Bit::from(a.to_int::<u64>() != 0);
+    signals[self.y_nets[0]].set_value(!a);
+  }
+
+  fn reset(&mut self) {}
+
+  fn input_connections(&self) -> Vec<&usize> {
+    self.a_nets.iter().collect()
   }
 
   fn output_connections(&self) -> Vec<&usize> {

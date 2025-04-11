@@ -11,6 +11,7 @@ use num_traits::PrimInt;
 use petgraph::graph::{Graph, NodeIndex};
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io::{Read, Write};
 use std::process::Command;
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -27,8 +28,8 @@ pub struct HardwareModule {
   pub signal_map: SignalMap,
   pub signals: Box<[Signal]>,
   pub cells: Box<[Cell]>,
-  pub clock_net: Option<usize>, // TODO: Add polarity
-  pub reset_net: Option<usize>, // TODO: Add polarity
+  pub clock_net: Option<(usize, Bit)>, // TODO: Add polarity
+  pub reset_net: Option<(usize, Bit)>, // TODO: Add polarity
 }
 
 #[derive(Debug, Error)]
@@ -50,18 +51,38 @@ pub enum ModuleError {
 }
 
 impl HardwareModule {
+  pub fn new_from_str(raw_netlist: &str, top_module: &str) -> Result<Self, ModuleError> {
+    let mut temp_netlist = match NamedTempFile::new() {
+      Ok(file) => file,
+      Err(err) => return Err(ModuleError::Netlist(err.to_string())),
+    };
+
+    // TODO: Better error handling
+    let _ = temp_netlist.write(raw_netlist.as_bytes()).unwrap();
+
+    Self::new_from_path(temp_netlist.path().to_str().unwrap(), top_module)
+  }
+
   pub fn new_from_path(netlist_path: &str, top_module: &str) -> Result<Self, ModuleError> {
     let temp_flattened = match NamedTempFile::new() {
       Ok(file) => file,
       Err(err) => return Err(ModuleError::Netlist(err.to_string())),
     };
 
+    let mut temp_torder = match NamedTempFile::new() {
+      Ok(file) => file,
+      Err(err) => return Err(ModuleError::Netlist(err.to_string())),
+    };
+
     let yosys_output = Command::new("yosys")
+      .arg("-f")
+      .arg("json")
       .arg(netlist_path)
       .arg("-p")
       .arg(format!(
-        "flatten; write_json {}",
-        temp_flattened.path().display()
+        "flatten; write_json {}; tee -o {} torder",
+        temp_flattened.path().display(),
+        temp_torder.path().display()
       ))
       .output();
 
@@ -74,10 +95,29 @@ impl HardwareModule {
       Err(err) => Err(ModuleError::Netlist(err.to_string())),
     }?;
 
-    Self::new(netlist, top_module)
+    let mut topo_order = String::new();
+    if let Err(err) = temp_torder.read_to_string(&mut topo_order) {
+      return Err(ModuleError::Netlist(err.to_string()));
+    }
+
+    let mut clean_topo_order = vec![];
+
+    // Don't need these lines
+    for line in topo_order.lines().skip(3) {
+      let split: Vec<&str> = line.split_whitespace().collect();
+      if split[0] == "cell" {
+        clean_topo_order.push(split[1]);
+      }
+    }
+
+    Self::new(netlist, &clean_topo_order, top_module)
   }
 
-  pub fn new(netlist: yosys::Netlist, top_module: &str) -> Result<Self, ModuleError> {
+  pub fn new(
+    netlist: yosys::Netlist,
+    topo_order: &[&str],
+    top_module: &str,
+  ) -> Result<Self, ModuleError> {
     // Design must be flattened
     let Some(synth_module) = netlist.modules.get(top_module) else {
       return Err(CellError::Unsupported(top_module.to_string()).into());
@@ -145,8 +185,8 @@ impl HardwareModule {
           yosys::BitVal::S(constant) => match constant {
             yosys::SpecialBit::_0 => 0, // Global 0
             yosys::SpecialBit::_1 => 1, // Global 1
-            yosys::SpecialBit::X => todo!("X not supported."),
-            yosys::SpecialBit::Z => todo!("Z not supported."),
+            yosys::SpecialBit::X => todo!("X bit not supported."),
+            yosys::SpecialBit::Z => todo!("Z bit not supported."),
           },
         };
         max_signal = max_signal.max(net);
@@ -159,17 +199,40 @@ impl HardwareModule {
     for (name, port) in &synth_module.ports {
       ports.insert(name.clone(), Port::new(port));
     }
+    // Temp?
+    for (name, netname) in &synth_module.netnames {
+      if ports.contains_key(name) {
+        continue;
+      }
+
+      let port = yosys::Port {
+        direction: yosys::PortDirection::Output,
+        bits: netname.bits.clone(),
+        offset: Default::default(),
+        upto: Default::default(),
+        signed: Default::default(),
+      };
+
+      ports.insert(name.clone(), Port::new(&port));
+    }
 
     let mut signals = vec![Signal::default(); max_signal + 1];
     signals[0].set_constant(Bit::Zero);
     signals[1].set_constant(Bit::One);
 
-    // let mut search = Topo::new(&graph);
-    let mut search = petgraph::visit::DfsPostOrder::new(&graph, input_node);
+    // TODO: Remove?
+    // let mut search = petgraph::visit::DfsPostOrder::new(&graph, input_node);
     let mut cells = vec![];
-    while let Some(cell_node) = search.next(&graph) {
-      cells.push(graph[cell_node].clone());
+    // while let Some(cell_node) = search.next(&graph) {
+    //   cells.push(graph[cell_node].clone());
+    // }
+
+    for cell_name in topo_order {
+      let idx = node_map[cell_name];
+      let node = graph[idx].clone();
+      cells.push(node);
     }
+
     cells.reverse();
 
     Ok(Self {
@@ -200,55 +263,79 @@ impl HardwareModule {
     }
   }
 
-  pub fn set_clock(&mut self, net: usize) -> Result<(), ModuleError> {
+  pub fn set_clock(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
     match self.signals.get(net) {
       Some(_) => {
-        self.clock_net = Some(net);
+        self.clock_net = Some((net, polarity));
         Ok(())
       }
       None => Err(ModuleError::MissingNet(net)),
     }
   }
 
-  pub fn set_reset(&mut self, net: usize) -> Result<(), ModuleError> {
+  pub fn set_reset(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
     match self.signals.get(net) {
       Some(_) => {
-        self.reset_net = Some(net);
+        self.reset_net = Some((net, polarity));
         Ok(())
       }
       None => Err(ModuleError::MissingNet(net)),
     }
   }
 
+  // Eval until all signals have settled
+  // TODO: Make this more efficient
   pub fn eval(&mut self) {
-    self
-      .cells
-      .iter_mut()
-      .for_each(|cell| cell.eval(&mut self.signals));
+    loop {
+      let before = self
+        .signals
+        .iter()
+        .map(|s| s.get_value())
+        .collect::<Vec<Bit>>();
+
+      self
+        .cells
+        .iter_mut()
+        .for_each(|cell| cell.eval(&mut self.signals));
+
+      let after = self
+        .signals
+        .iter()
+        .map(|s| s.get_value())
+        .collect::<Vec<Bit>>();
+
+      if before == after {
+        break;
+      }
+    }
   }
 
-  pub fn eval_clocked(&mut self) -> Result<(), ModuleError> {
-    let Some(clock_net) = self.clock_net else {
+  pub fn eval_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
+    let Some((clock_net, polarity)) = self.clock_net else {
       return Err(ModuleError::MissingSignal("clock".to_string()));
     };
 
-    self.eval();
-    self.signals[clock_net].set_value(Bit::One);
-    self.eval();
-    self.signals[clock_net].set_value(Bit::Zero);
-    self.eval();
+    let cycles = cycles.unwrap_or(1);
+
+    for _ in 0..cycles {
+      self.eval();
+      self.signals[clock_net].set_value(polarity);
+      self.eval();
+      self.signals[clock_net].set_value(!polarity);
+      self.eval();
+    }
 
     Ok(())
   }
 
-  pub fn eval_reset_clocked(&mut self) -> Result<(), ModuleError> {
-    let Some(reset_net) = self.reset_net else {
+  pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
+    let Some((reset_net, polarity)) = self.reset_net else {
       return Err(ModuleError::MissingSignal("reset".to_string()));
     };
 
-    self.signals[reset_net].set_value(Bit::One);
-    self.eval_clocked()?;
-    self.signals[reset_net].set_value(Bit::Zero);
+    self.signals[reset_net].set_value(polarity);
+    self.eval_clocked(cycles)?;
+    self.signals[reset_net].set_value(!polarity);
     self.eval();
 
     Ok(())

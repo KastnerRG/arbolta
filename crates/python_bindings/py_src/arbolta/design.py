@@ -26,11 +26,14 @@ class PortConfig:
         Port is a clock signal.
     reset : bool, optional
         Port is a reset signal.
+    polarity: bool, optional
+        Clock polarity of port.
     """
     shape: Tuple[int, int] = (1, 1)
     dtype: np.dtype = np.uint32
     clock: bool = False
     reset: bool = False
+    polarity: int = 1
 
 
 class DesignConfig(TypedDict):
@@ -48,11 +51,17 @@ class DesignConfig(TypedDict):
     config: PortConfig
 
 
+@dataclass
+class Port:
+    data: np.ndarray
+    updated: bool = False
+
+
 class HardwarePorts:
 
     def __init__(self, config: DesignConfig, design: Design):
 
-        _ports: Dict[str, np.ndarray] = {}
+        _ports: Dict[str, Port] = {}
 
         port_name: str
         port_config: PortConfig
@@ -61,20 +70,20 @@ class HardwarePorts:
                 raise AttributeError(
                     f"Port `{port_name}` cannot be a reset and clock")
             if port_config.reset:
-                design.set_reset(port_name)
+                design.set_reset(port_name, bool(port_config.polarity))
             if port_config.clock:
-                design.set_clock(port_name)
+                design.set_clock(port_name, bool(port_config.polarity))
 
             design.set_port_shape(port_name, port_config.shape)
-            _ports[port_name] = np.zeros(port_config.shape[1],
-                                         dtype=port_config.dtype)
+            _ports[port_name] = Port(
+                np.zeros(port_config.shape[1], dtype=port_config.dtype))
 
         super().__setattr__('_ports', _ports)
         super().__setattr__('_design', design)
 
     def __getattr__(self, name: str) -> Any:
         if '_ports' in self.__dict__ and '_design' in self.__dict__:
-            _ports = self.__dict__['_ports']
+            _ports: dict[str, Port] = self.__dict__['_ports']
 
             if name not in _ports:
                 raise AttributeError(f"Port `{name}` does not exist")
@@ -82,21 +91,22 @@ class HardwarePorts:
             _design = self.__dict__['_design']
 
             if not _design.is_port_input(name):
-                _design.get_port_numpy(name, _ports[name])
+                _design.get_port_numpy(name, _ports[name].data)
 
-            return _ports[name]
+            return _ports[name].data
 
         else:
             raise AttributeError("Ports not initialized")
 
     def __setattr__(self, name: str, value: Any) -> None:
         if '_ports' in self.__dict__ and '_design' in self.__dict__:
-            _ports = self.__dict__['_ports']
+            _ports: dict[str, Port] = self.__dict__['_ports']
 
             if name not in _ports:
                 raise AttributeError(f"Port `{name}` does not exist")
 
-            np.copyto(_ports[name], value)
+            np.copyto(_ports[name].data, value)
+            _ports[name].updated = True
 
         else:
             raise AttributeError("Ports not initialized")
@@ -127,7 +137,7 @@ class HardwareDesign:
         """
         self.design.reset()
 
-    def reset_clocked(self):
+    def eval_reset_clocked(self, cycles: Optional[int] = 1):
         """
         Asserts reset signal and clocks design for 1 cycle.
 
@@ -135,19 +145,22 @@ class HardwareDesign:
         ------
             AttributeError: No reset and/or clock signal configured.
         """
-        self.design.reset_clocked()
+        self.design.eval_reset_clocked(cycles)
 
     def eval(self):
         """
         Evaluates all cells in design.
         """
-        for port_name, port_array in self.ports._ports.items():
-            if self.design.is_port_input(port_name):
-                self.design.set_port_numpy(port_name, port_array)
+        port: Port
+        for port_name, port in self.ports._ports.items():
+            if port.updated:
+                self.design.set_port_numpy(port_name, port.data)
+                port.updated = False
+        # if self.design.is_port_input(port_name):
 
         self.design.eval()
 
-    def eval_clocked(self):
+    def eval_clocked(self, cycles: Optional[int] = 1):
         """
         Clocks and evaluates design for 1 cycle.
 
@@ -155,11 +168,15 @@ class HardwareDesign:
         ------
             AttributeError: No clock signal configured.
         """
-        for port_name, port_array in self.ports._ports.items():
-            if self.design.is_port_input(port_name):
-                self.design.set_port_numpy(port_name, port_array)
+        port: Port
+        for port_name, port in self.ports._ports.items():
+            # if self.design.is_port_input(port_name):
+            if port.updated:
+                self.design.set_port_numpy(port_name, port.data)
+                port.updated = False
+                # self.design.set_port_numpy(port_name, port_array)
 
-        self.design.eval_clocked()
+        self.design.eval_clocked(cycles)
 
     def cell_breakdown(self,
                        module_name: Optional[str] = None) -> Dict[str, int]:

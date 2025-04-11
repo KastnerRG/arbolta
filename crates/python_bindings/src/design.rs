@@ -102,31 +102,101 @@ impl PyDesign {
   }
 
   #[allow(unused_variables)]
-  fn set_clock(&mut self, name: &str) -> PyResult<()> {
-    todo!()
+  fn set_clock(&mut self, name: &str, polarity: bool) -> PyResult<()> {
+    let Some(nets) = self.module.signal_map.get(name) else {
+      return Err(PyException::new_err(format!("No signal `{name}`")));
+    };
+
+    if nets.len() != 1 {
+      return Err(PyException::new_err("Clock net ambiguous".to_string()));
+    }
+
+    self.module.set_clock(nets[0], polarity.into()).unwrap();
+
+    Ok(())
   }
 
-  #[allow(unused_variables)]
-  fn set_reset(&mut self, name: &str) -> PyResult<()> {
-    todo!()
+  fn set_reset(&mut self, name: &str, polarity: bool) -> PyResult<()> {
+    let Some(nets) = self.module.signal_map.get(name) else {
+      return Err(PyException::new_err(format!("No signal `{name}`")));
+    };
+
+    if nets.len() != 1 {
+      return Err(PyException::new_err("Reset net ambiguous".to_string()));
+    }
+
+    self.module.set_reset(nets[0], polarity.into()).unwrap();
+
+    Ok(())
   }
 
   fn reset(&mut self) {
     self.module.reset();
   }
 
-  #[allow(unused_variables)]
-  fn reset_clocked(&mut self) -> PyResult<()> {
-    todo!()
-  }
-
   fn eval(&mut self) {
     self.module.eval();
+    // println!("{:?}", self.module.clock_net);
+    // println!("{:?}", self.module.reset_net);
+    // println!(
+    //   "clk: {:#>08x}",
+    //   self.module.get_port_int::<u32>("clk").unwrap()
+    // );
+    // println!(
+    //   "rstn: {:#>08x}",
+    //   self.module.get_port_int::<u32>("rstn").unwrap()
+    // );
+    // println!(
+    //   "s_valid: {:#>08x}",
+    //   self.module.get_port_int::<u32>("s_valid").unwrap()
+    // );
+    // println!(
+    //   "s_last: {:#>08x}",
+    //   self.module.get_port_int::<u32>("s_last").unwrap()
+    // );
+    // println!(
+    //   "m_ready: {:#>08x}",
+    //   self.module.get_port_int::<u32>("m_ready").unwrap()
+    // );
+    // println!(
+    //   "s_ready: {:#>08x}",
+    //   self.module.get_port_int::<u32>("s_ready").unwrap()
+    // );
+    // println!(
+    //   "m_valid: {:#>08x}",
+    //   self.module.get_port_int::<u32>("m_valid").unwrap()
+    // );
+    // println!(
+    //   "m_last: {:#>08x}",
+    //   self.module.get_port_int::<u32>("m_last").unwrap()
+    // );
+    // println!(
+    //   "sx_data: {:#>08x}",
+    //   self.module.get_port_int::<u32>("sx_data").unwrap()
+    // );
+    // println!(
+    //   "sk_data: {:#>08x}",
+    //   self.module.get_port_int::<u32>("sk_data").unwrap()
+    // );
+    // println!(
+    //   "m_data: {:#>08x}",
+    //   self.module.get_port_int::<u32>("m_data").unwrap()
+    // );
   }
 
-  #[allow(unused_variables)]
-  fn eval_clocked(&mut self) -> PyResult<()> {
-    todo!()
+  // TODO: Fix this
+  fn eval_clocked(&mut self, cycles: u32) -> PyResult<()> {
+    match self.module.eval_clocked(Some(cycles)) {
+      Ok(()) => Ok(()),
+      Err(err) => Err(PyException::new_err(format!("{err}"))),
+    }
+  }
+
+  fn eval_reset_clocked(&mut self, cycles: u32) -> PyResult<()> {
+    match self.module.eval_reset_clocked(Some(cycles)) {
+      Ok(()) => Ok(()),
+      Err(err) => Err(PyException::new_err(format!("{err}"))),
+    }
   }
 
   #[allow(unused_variables)]

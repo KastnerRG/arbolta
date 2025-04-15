@@ -39,25 +39,17 @@ impl PyDesign {
     })
   }
 
-  #[allow(unused_variables)]
   fn __setstate__(&mut self, state: &Bound<'_, PyBytes>) {
-    // state.as_bytes()
-    // *self = bincode::deserialize(state.as_bytes()).unwrap();
     let config = bincode::config::standard();
     (*self, _) = bincode::decode_from_slice(state.as_bytes(), config).unwrap();
   }
 
-  #[allow(unused_variables)]
   fn __getstate__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
     let config = bincode::config::standard();
     match bincode::encode_to_vec(self, config) {
       Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
       Err(err) => Err(PyValueError::new_err(format!("{err}"))),
     }
-    // match bincode::serialize(&self) {
-    //   Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
-    //   Err(err) => Err(PyValueError::new_err(format!("{err}"))),
-    // }
   }
 
   fn __getnewargs__(&self) -> (String, String) {
@@ -71,7 +63,8 @@ impl PyDesign {
     }
   }
 
-  fn load(&self, path: &str) -> PyResult<Self> {
+  #[staticmethod]
+  fn load(path: &str) -> PyResult<Self> {
     let module = match HardwareModule::load(path) {
       Ok(module) => module,
       Err(err) => return Err(PyValueError::new_err(format!("{err}"))),

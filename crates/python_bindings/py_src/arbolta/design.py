@@ -8,7 +8,7 @@ import numpy as np
 
 from .arbolta import Design
 
-__all__ = ["PortConfig", "DesignConfig", "HardwareDesign"]
+__all__ = ["PortConfig", "DesignConfig", "HardwareDesign", "save", "load"]
 
 
 @dataclass
@@ -274,9 +274,10 @@ class HardwareDesign:
         return self.design.get_cell_info()
 
 
-def save(file: str, design: HardwareDesign) -> None:
-    assert RuntimeError("Unimplemented")
+def save(path: str, design: HardwareDesign) -> None:
+    design.design.save(path)
 
 
-def load(file: str) -> HardwareDesign:
-    assert RuntimeError("Unimplemented")
+def load(path: str) -> HardwareDesign:
+    return Design.load(path)
+    # assert RuntimeError("Unimplemented")

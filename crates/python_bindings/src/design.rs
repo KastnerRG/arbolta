@@ -4,14 +4,18 @@
 use crate::conversion::{
   bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits,
 };
+
 use arbol::hardware_module::HardwareModule;
 use arbol::port::PortDirection;
+use bincode::{Decode, Encode};
 use pyo3::exceptions::{PyAttributeError, PyException, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[pyclass(dict, module = "arbolta", name = "Design")]
+#[derive(Deserialize, Serialize, Decode, Encode)]
 pub struct PyDesign {
   #[pyo3(get)]
   pub top_module: String,
@@ -37,26 +41,49 @@ impl PyDesign {
 
   #[allow(unused_variables)]
   fn __setstate__(&mut self, state: &Bound<'_, PyBytes>) {
-    todo!()
+    // state.as_bytes()
+    // *self = bincode::deserialize(state.as_bytes()).unwrap();
+    let config = bincode::config::standard();
+    (*self, _) = bincode::decode_from_slice(state.as_bytes(), config).unwrap();
   }
 
   #[allow(unused_variables)]
   fn __getstate__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-    todo!()
+    let config = bincode::config::standard();
+    match bincode::encode_to_vec(self, config) {
+      Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
+      Err(err) => Err(PyValueError::new_err(format!("{err}"))),
+    }
+    // match bincode::serialize(&self) {
+    //   Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
+    //   Err(err) => Err(PyValueError::new_err(format!("{err}"))),
+    // }
   }
 
   fn __getnewargs__(&self) -> (String, String) {
     (self.top_module.clone(), self.netlist_path.clone())
   }
 
-  #[allow(unused_variables)]
   fn save(&self, path: &str) -> PyResult<()> {
-    todo!()
+    match self.module.save(path) {
+      Ok(()) => Ok(()),
+      Err(err) => Err(PyValueError::new_err(format!("{err}"))),
+    }
   }
 
-  #[allow(unused_variables)]
   fn load(&self, path: &str) -> PyResult<Self> {
-    todo!()
+    let module = match HardwareModule::load(path) {
+      Ok(module) => module,
+      Err(err) => return Err(PyValueError::new_err(format!("{err}"))),
+    };
+
+    let top_module = module.name.clone();
+
+    Ok(Self {
+      top_module,
+      netlist_path: String::new(), // TODO: Fix
+      module,
+    })
   }
 
   fn get_port_shape(&self, name: &str) -> PyResult<[usize; 2]> {
@@ -94,6 +121,19 @@ impl PyDesign {
       .collect()
   }
 
+  fn get_cell_info(&self, py: Python<'_>) -> PyResult<PyObject> {
+    let all_cell_info = PyDict::new(py);
+    for (name, cell_type) in self.module.cell_info.iter() {
+      let cell_info = PyDict::new(py);
+      cell_info.set_item("type", cell_type)?;
+
+      // TODO: Add other fields
+      all_cell_info.set_item(name.clone(), cell_info)?;
+    }
+
+    Ok(all_cell_info.into())
+  }
+
   pub fn stick_signal(&mut self, net: usize, val: bool) -> PyResult<()> {
     match self.module.stick_signal(net, val.into()) {
       Ok(()) => Ok(()),
@@ -101,7 +141,13 @@ impl PyDesign {
     }
   }
 
-  #[allow(unused_variables)]
+  pub fn unstick_signal(&mut self, net: usize) -> PyResult<()> {
+    match self.module.unstick_signal(net) {
+      Ok(()) => Ok(()),
+      Err(err) => Err(PyException::new_err(format!("{err}"))),
+    }
+  }
+
   fn set_clock(&mut self, name: &str, polarity: bool) -> PyResult<()> {
     let Some(nets) = self.module.signal_map.get(name) else {
       return Err(PyException::new_err(format!("No signal `{name}`")));
@@ -136,52 +182,6 @@ impl PyDesign {
 
   fn eval(&mut self) {
     self.module.eval();
-    // println!("{:?}", self.module.clock_net);
-    // println!("{:?}", self.module.reset_net);
-    // println!(
-    //   "clk: {:#>08x}",
-    //   self.module.get_port_int::<u32>("clk").unwrap()
-    // );
-    // println!(
-    //   "rstn: {:#>08x}",
-    //   self.module.get_port_int::<u32>("rstn").unwrap()
-    // );
-    // println!(
-    //   "s_valid: {:#>08x}",
-    //   self.module.get_port_int::<u32>("s_valid").unwrap()
-    // );
-    // println!(
-    //   "s_last: {:#>08x}",
-    //   self.module.get_port_int::<u32>("s_last").unwrap()
-    // );
-    // println!(
-    //   "m_ready: {:#>08x}",
-    //   self.module.get_port_int::<u32>("m_ready").unwrap()
-    // );
-    // println!(
-    //   "s_ready: {:#>08x}",
-    //   self.module.get_port_int::<u32>("s_ready").unwrap()
-    // );
-    // println!(
-    //   "m_valid: {:#>08x}",
-    //   self.module.get_port_int::<u32>("m_valid").unwrap()
-    // );
-    // println!(
-    //   "m_last: {:#>08x}",
-    //   self.module.get_port_int::<u32>("m_last").unwrap()
-    // );
-    // println!(
-    //   "sx_data: {:#>08x}",
-    //   self.module.get_port_int::<u32>("sx_data").unwrap()
-    // );
-    // println!(
-    //   "sk_data: {:#>08x}",
-    //   self.module.get_port_int::<u32>("sk_data").unwrap()
-    // );
-    // println!(
-    //   "m_data: {:#>08x}",
-    //   self.module.get_port_int::<u32>("m_data").unwrap()
-    // );
   }
 
   // TODO: Fix this

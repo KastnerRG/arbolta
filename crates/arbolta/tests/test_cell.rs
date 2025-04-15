@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use arbolta::bit::Bit;
-use arbolta::cell::{create_cell, Cell, CellFn, Dff, DffPosedgeReset};
+use arbolta::cell::{create_cell, Cell, CellFn, Dff, DffReset};
 use arbolta::signal::Signal;
 
 use rstest::rstest;
@@ -181,7 +181,7 @@ fn test_cell_dff_p() {
 fn test_cell_sdff_pp() {
   // D, C, R, Q
   let (data_in, clock, reset, data_out) = (0, 1, 2, 3);
-  let mut cell = DffPosedgeReset::new(data_in, clock, reset, data_out);
+  let mut cell = DffReset::new(Bit::One, data_in, clock, reset, data_out);
   let mut signals = vec![Signal::default(); 4].into_boxed_slice();
 
   cell.eval(&mut signals);

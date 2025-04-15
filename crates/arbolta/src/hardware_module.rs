@@ -3,12 +3,12 @@
 
 use super::port::{Port, PortDirection, PortError};
 use crate::bit::{Bit, BitVec};
-use crate::cell::{create_cell, Cell, CellError};
+use crate::cell::{create_cell, Cell, CellError, CellFn};
 use crate::signal::Signal;
-use indexmap::{IndexMap, IndexSet};
+use bincode::{Decode, Encode};
 use ndarray::{Array1, ArrayView1};
 use num_traits::PrimInt;
-use petgraph::graph::{Graph, NodeIndex};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Read, Write};
@@ -17,16 +17,16 @@ use tempfile::NamedTempFile;
 use thiserror::Error;
 use yosys_netlist_json as yosys;
 
-pub type CellGraph = Graph<Cell, usize>;
 pub type PortMap = HashMap<String, Port>;
 pub type SignalMap = HashMap<String, Box<[usize]>>;
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Deserialize, Serialize, Encode, Decode)]
 pub struct HardwareModule {
   pub name: String,
   pub ports: PortMap,
   pub signal_map: SignalMap,
   pub signals: Box<[Signal]>,
+  pub cell_info: HashMap<String, String>,
   pub cells: Box<[Cell]>,
   pub clock_net: Option<(usize, Bit)>, // TODO: Add polarity
   pub reset_net: Option<(usize, Bit)>, // TODO: Add polarity
@@ -48,9 +48,31 @@ pub enum ModuleError {
   MissingNet(usize),
   #[error("module `{0}` does not exist")]
   MissingModule(String),
+  #[error("{0}")]
+  FlexReaderError(#[from] flexbuffers::ReaderError),
+  #[error("{0}")]
+  DeserializeError(#[from] flexbuffers::DeserializationError),
+  #[error("{0}")]
+  SerializeError(#[from] flexbuffers::SerializationError),
+  #[error("{0}")]
+  IoError(#[from] std::io::Error),
 }
 
 impl HardwareModule {
+  pub fn load(path: &str) -> Result<Self, ModuleError> {
+    let serialized = std::fs::read(path)?;
+    let reader = flexbuffers::Reader::get_root(serialized.as_slice())?;
+    Ok(Self::deserialize(reader)?)
+  }
+
+  pub fn save(&self, path: &str) -> Result<(), ModuleError> {
+    let mut serializer = flexbuffers::FlexbufferSerializer::new();
+    self.serialize(&mut serializer)?;
+    let mut file_output = std::fs::File::create(path)?;
+    _ = file_output.write(serializer.view())?;
+    Ok(())
+  }
+
   pub fn new_from_str(raw_netlist: &str, top_module: &str) -> Result<Self, ModuleError> {
     let mut temp_netlist = match NamedTempFile::new() {
       Ok(file) => file,
@@ -123,56 +145,23 @@ impl HardwareModule {
       return Err(CellError::Unsupported(top_module.to_string()).into());
     };
 
-    let mut bit_drivers = IndexMap::<usize, IndexSet<&str>>::new();
-    let mut bit_users = IndexMap::<usize, IndexSet<&str>>::new();
-    let mut node_map = IndexMap::<&str, NodeIndex<u32>>::new();
+    let mut cells = vec![];
+    // let mut cell_map = CellMap::new();
+    let mut cell_info: HashMap<String, String> = HashMap::new();
 
-    let mut graph = CellGraph::new();
-    let input_node = graph.add_node(Cell::default()); // Start of graph search, module inputs
-
-    for (cell_name, cell) in synth_module.cells.iter() {
-      if cell.cell_type == "$scopeinfo" {
+    for cell_name in topo_order.iter().rev() {
+      if *cell_name == "$scopeinfo" {
         // Ignore for now
         continue;
       }
-      let new_cell = create_cell(cell)?;
 
-      new_cell
-        .input_connections()
-        .iter()
-        .filter(|i| ***i > 1) // Skip constants
-        .for_each(|i| {
-          bit_users.entry(**i).or_default().insert(cell_name);
-        });
+      let synth_cell = synth_module.cells.get(*cell_name).unwrap();
+      let cell = create_cell(synth_cell)?;
 
-      new_cell
-        .output_connections()
-        .iter()
-        .filter(|i| ***i > 1) // Skip constants
-        .for_each(|i| {
-          bit_drivers.entry(**i).or_default().insert(cell_name);
-        });
-
-      let cell_node = graph.add_node(new_cell);
-      node_map.insert(cell_name, cell_node);
-    }
-
-    for (user_bit, user_cells) in bit_users {
-      if let Some(drivers) = bit_drivers.get(&user_bit) {
-        // Existing driver node
-        for driver_cell in drivers {
-          for user in &user_cells {
-            let (driver_node, user_node) = (node_map[driver_cell], node_map[user]);
-            graph.add_edge(driver_node, user_node, user_bit);
-          }
-        }
-      } else {
-        // Connect to input cell
-        for user in user_cells {
-          let user_node = node_map[user];
-          graph.add_edge(input_node, user_node, user_bit);
-        }
-      }
+      cells.push(cell);
+      // cell_map.insert(cell_name.to_string(), cells.len() - 1);
+      // cell_info.insert(cell_name.to_string(), synth_cell.clone());
+      cell_info.insert(cell_name.to_string(), synth_cell.cell_type.to_string());
     }
 
     let mut signal_map = SignalMap::new();
@@ -220,26 +209,12 @@ impl HardwareModule {
     signals[0].set_constant(Bit::Zero);
     signals[1].set_constant(Bit::One);
 
-    // TODO: Remove?
-    // let mut search = petgraph::visit::DfsPostOrder::new(&graph, input_node);
-    let mut cells = vec![];
-    // while let Some(cell_node) = search.next(&graph) {
-    //   cells.push(graph[cell_node].clone());
-    // }
-
-    for cell_name in topo_order {
-      let idx = node_map[cell_name];
-      let node = graph[idx].clone();
-      cells.push(node);
-    }
-
-    cells.reverse();
-
     Ok(Self {
       name: top_module.to_string(),
       ports,
       signal_map,
       signals: signals.into_boxed_slice(),
+      cell_info,
       cells: cells.into_boxed_slice(),
       clock_net: None,
       reset_net: None,
@@ -254,13 +229,19 @@ impl HardwareModule {
   }
 
   pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
-    match self.signals.get_mut(net) {
-      Some(signal) => {
-        signal.set_constant(value);
-        Ok(())
-      }
-      None => Err(ModuleError::MissingNet(net)),
-    }
+    let Some(signal) = self.signals.get_mut(net) else {
+      return Err(ModuleError::MissingNet(net));
+    };
+    signal.set_constant(value);
+    Ok(())
+  }
+
+  pub fn unstick_signal(&mut self, net: usize) -> Result<(), ModuleError> {
+    let Some(signal) = self.signals.get_mut(net) else {
+      return Err(ModuleError::MissingNet(net));
+    };
+    signal.unset_constant();
+    Ok(())
   }
 
   pub fn set_clock(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {

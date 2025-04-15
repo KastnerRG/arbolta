@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
+use bincode::{Decode, Encode};
 use core::fmt;
 use ndarray::{Array1, ArrayView1, ArrayViewMut1};
 use num_traits::PrimInt;
@@ -12,7 +13,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 /// Primitive signal value
-#[derive(Debug, Clone, Eq, Copy, PartialEq, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Eq, Copy, PartialEq, Deserialize, Serialize, Default, Encode, Decode)]
 pub enum Bit {
   #[default]
   Zero,

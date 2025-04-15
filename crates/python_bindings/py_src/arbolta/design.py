@@ -267,6 +267,12 @@ class HardwareDesign:
     def stick_signal(self, net: int, val: Union[int, bool]) -> None:
         return self.design.stick_signal(net, bool(val))
 
+    def unstick_signal(self, net: int) -> None:
+        return self.design.unstick_signal(net)
+
+    def cell_info(self) -> Dict[str, Dict]:
+        return self.design.get_cell_info()
+
 
 def save(file: str, design: HardwareDesign) -> None:
     assert RuntimeError("Unimplemented")

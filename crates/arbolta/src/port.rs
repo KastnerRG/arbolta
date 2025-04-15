@@ -3,6 +3,7 @@
 
 use crate::bit::{Bit, BitVec};
 use crate::signal::Signal;
+use bincode::{Decode, Encode};
 use ndarray::{Array1, ArrayView1};
 use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
@@ -10,13 +11,13 @@ use std::fmt::Debug;
 use thiserror::Error;
 use yosys_netlist_json as yosys;
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Encode, Decode)]
 pub enum PortDirection {
   Input,
   Output,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Encode, Decode)]
 pub struct Port {
   pub direction: PortDirection,
   pub nets: Box<[usize]>,

@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 use crate::bit::Bit;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// Connection between cells/modules.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default, Encode, Decode)]
 pub struct Signal {
   /// Value of net
   pub value: Bit,
@@ -35,6 +36,10 @@ impl Signal {
     self.value = value;
     self.toggle_count_falling = 0;
     self.toggle_count_rising = 0;
+  }
+
+  pub fn unset_constant(&mut self) {
+    self.constant = false;
   }
 
   /// Reset signal value to zero.

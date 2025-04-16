@@ -1,0 +1,3 @@
+[submodule "experiments/systolic_array/axis-systolic-array"]
+	path = experiments/systolic_array/axis-systolic-array
+	url = git@github.com:alexredd99/axis-systolic-array.git

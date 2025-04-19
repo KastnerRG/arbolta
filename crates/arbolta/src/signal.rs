@@ -45,12 +45,8 @@ impl Signal {
   /// Reset signal value to zero.
   /// Clear all signal statistics.
   pub fn reset(&mut self) {
-    // Ignore constants
-    // if !self.constant {
-    // self.value = Bit::Zero
-    // }
     self.constant = false;
-    self.value = Bit::Zero;
+    self.value = Bit::ZERO;
     self.toggle_count_falling = 0;
     self.toggle_count_rising = 0;
   }
@@ -62,14 +58,16 @@ impl Signal {
 
   /// Set value of signal. Updates toggle statistics.
   pub fn set_value(&mut self, val: Bit) {
-    if !self.constant {
-      match &[self.value, val] {
-        [Bit::Zero, Bit::One] => self.toggle_count_rising += 1,
-        [Bit::One, Bit::Zero] => self.toggle_count_falling += 1,
-        [Bit::Zero, Bit::Zero] | [Bit::One, Bit::One] => return,
-      }
-      self.value = val;
+    if self.constant || self.value == val {
+      return;
     }
+
+    match (self.value, val) {
+      (Bit::ZERO, Bit::ONE) => self.toggle_count_rising += 1,
+      (Bit::ONE, Bit::ZERO) => self.toggle_count_falling += 1,
+      _ => {}
+    }
+    self.value = val;
   }
 
   /// Get total signal toggle count (rising + falling).

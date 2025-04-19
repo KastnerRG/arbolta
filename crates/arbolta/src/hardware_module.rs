@@ -206,8 +206,8 @@ impl HardwareModule {
     }
 
     let mut signals = vec![Signal::default(); max_signal + 1];
-    signals[0].set_constant(Bit::Zero);
-    signals[1].set_constant(Bit::One);
+    signals[0].set_constant(Bit::ZERO);
+    signals[1].set_constant(Bit::ONE);
 
     Ok(Self {
       name: top_module.to_string(),
@@ -325,8 +325,8 @@ impl HardwareModule {
   pub fn reset(&mut self) {
     self.cells.iter_mut().for_each(|c| c.reset());
     self.signals.iter_mut().for_each(|s| s.reset());
-    self.signals[0].set_constant(Bit::Zero);
-    self.signals[1].set_constant(Bit::One);
+    self.signals[0].set_constant(Bit::ZERO);
+    self.signals[1].set_constant(Bit::ONE);
   }
 
   pub fn set_port_shape(&mut self, name: &str, shape: &[usize; 2]) -> Result<(), ModuleError> {

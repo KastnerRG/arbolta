@@ -7,6 +7,7 @@ use bincode::{Decode, Encode};
 use ndarray::{Array1, ArrayView1};
 use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use std::fmt::Debug;
 use thiserror::Error;
 use yosys_netlist_json as yosys;
@@ -20,7 +21,7 @@ pub enum PortDirection {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Encode, Decode)]
 pub struct Port {
   pub direction: PortDirection,
-  pub nets: Box<[usize]>,
+  pub nets: SmallVec<[usize; 512]>,
   pub shape: [usize; 2],
 }
 
@@ -63,7 +64,7 @@ impl Port {
 
     Self {
       direction,
-      nets: nets.into_boxed_slice(),
+      nets: nets.into(),
       shape,
     }
   }
@@ -100,15 +101,8 @@ impl Port {
       return Err(PortError::Direction);
     }
 
-    let stop_idx = vals.bits.len();
-
-    for (i, val) in vals
-      .bits
-      .iter()
-      .enumerate()
-      .take(stop_idx.clamp(0, self.nets.len()))
-    {
-      signals[self.nets[i]].set_value(*val);
+    for (dst, val) in self.nets.iter().zip(vals.bits.iter()) {
+      signals[*dst].set_value(*val);
     }
 
     Ok(())

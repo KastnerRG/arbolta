@@ -7,66 +7,66 @@ use std::str::FromStr;
 use rstest::rstest;
 
 #[rstest]
-#[case("0", Bit::Zero)]
-#[case("1", Bit::One)]
+#[case("0", Bit::ZERO)]
+#[case("1", Bit::ONE)]
 fn test_bit_from_str(#[case] val: String, #[case] expected: Bit) {
   assert_eq!(Bit::from_str(&val).unwrap(), expected);
 }
 
 #[rstest]
-#[case(Bit::Zero, '0')]
-#[case(Bit::One, '1')]
+#[case(Bit::ZERO, '0')]
+#[case(Bit::ONE, '1')]
 fn test_bit_to_char(#[case] bit: Bit, #[case] expected: char) {
   assert_eq!(<Bit as Into<char>>::into(bit), expected);
 }
 
 #[rstest]
-#[case(false, Bit::Zero)]
-#[case(true, Bit::One)]
+#[case(false, Bit::ZERO)]
+#[case(true, Bit::ONE)]
 fn test_bit_from_bool(#[case] val: bool, #[case] expected: Bit) {
-  assert_eq!(Bit::from(val), expected);
+  assert_eq!(Bit(val), expected);
 }
 
 #[rstest]
-#[case(Bit::Zero, false)]
-#[case(Bit::One, true)]
+#[case(Bit::ZERO, false)]
+#[case(Bit::ONE, true)]
 fn test_bit_to_bool(#[case] bit: Bit, #[case] expected: bool) {
-  assert_eq!(<Bit as Into<bool>>::into(bit), expected);
+  assert_eq!(bit.0, expected);
 }
 
 #[rstest]
-#[case(0, Bit::Zero)]
-#[case(1, Bit::One)]
+#[case(0, Bit::ZERO)]
+#[case(1, Bit::ONE)]
 fn test_bit_from_int(#[case] val: usize, #[case] expected: Bit) {
   assert_eq!(Bit::from_int(val).unwrap(), expected);
 }
 
 #[test]
 fn test_bit_not() {
-  assert_eq!(!Bit::Zero, Bit::One);
-  assert_eq!(!Bit::One, Bit::Zero);
+  assert_eq!(!Bit::ZERO, Bit::ONE);
+  assert_eq!(!Bit::ONE, Bit::ZERO);
 }
 
 #[test]
 fn test_bit_and() {
-  assert_eq!(Bit::Zero & Bit::Zero, Bit::Zero);
-  assert_eq!(Bit::Zero & Bit::One, Bit::Zero);
-  assert_eq!(Bit::One & Bit::Zero, Bit::Zero);
-  assert_eq!(Bit::One & Bit::One, Bit::One);
+  assert_eq!(Bit::ZERO & Bit::ZERO, Bit::ZERO);
+  assert_eq!(Bit::ZERO & Bit::ONE, Bit::ZERO);
+  assert_eq!(Bit::ONE & Bit::ZERO, Bit::ZERO);
+  assert_eq!(Bit::ONE & Bit::ONE, Bit::ONE);
 }
 
 #[test]
 fn test_bit_or() {
-  assert_eq!(Bit::Zero | Bit::Zero, Bit::Zero);
-  assert_eq!(Bit::Zero | Bit::One, Bit::One);
-  assert_eq!(Bit::One | Bit::Zero, Bit::One);
-  assert_eq!(Bit::One | Bit::One, Bit::One);
+  assert_eq!(Bit::ZERO | Bit::ZERO, Bit::ZERO);
+  assert_eq!(Bit::ZERO | Bit::ONE, Bit::ONE);
+  assert_eq!(Bit::ONE | Bit::ZERO, Bit::ONE);
+  assert_eq!(Bit::ONE | Bit::ONE, Bit::ONE);
 }
 
 #[test]
 fn test_bit_xor() {
-  assert_eq!(Bit::Zero ^ Bit::Zero, Bit::Zero);
-  assert_eq!(Bit::Zero ^ Bit::One, Bit::One);
-  assert_eq!(Bit::One ^ Bit::Zero, Bit::One);
-  assert_eq!(Bit::One ^ Bit::One, Bit::Zero);
+  assert_eq!(Bit::ZERO ^ Bit::ZERO, Bit::ZERO);
+  assert_eq!(Bit::ZERO ^ Bit::ONE, Bit::ONE);
+  assert_eq!(Bit::ONE ^ Bit::ZERO, Bit::ONE);
+  assert_eq!(Bit::ONE ^ Bit::ONE, Bit::ZERO);
 }

@@ -5,6 +5,7 @@ use derive_more::Constructor;
 use enum_dispatch::enum_dispatch;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use std::fmt::Debug;
 use thiserror::Error;
 use yosys_netlist_json as yosys;
@@ -105,7 +106,7 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
         .into_values()
         .flatten()
         .collect::<Vec<usize>>()
-        .into_boxed_slice(),
+        .into(),
       output_connections["Y"][0],
     )),
     "OR" | "$_OR_" | "$reduce_or" => Cell::Or(Or::new(
@@ -113,7 +114,7 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
         .into_values()
         .flatten()
         .collect::<Vec<usize>>()
-        .into_boxed_slice(),
+        .into(),
       output_connections["Y"][0],
     )),
     "ORNOT" | "$_ORNOT_" => Cell::OrNot(OrNot::new(
@@ -121,7 +122,7 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
         .into_values()
         .flatten()
         .collect::<Vec<usize>>()
-        .into_boxed_slice(),
+        .into(),
       output_connections["Y"][0],
     )),
     "$_NOR_" | "NOR" => Cell::Nor(Nor::new(
@@ -129,7 +130,7 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
         .into_values()
         .flatten()
         .collect::<Vec<usize>>()
-        .into_boxed_slice(),
+        .into(),
       output_connections["Y"][0],
     )),
     "XOR" | "$_XOR_" => Cell::Xor(Xor::new(
@@ -137,7 +138,7 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
         .into_values()
         .flatten()
         .collect::<Vec<usize>>()
-        .into_boxed_slice(),
+        .into(),
       output_connections["Y"][0],
     )),
     "$_XNOR_" | "XNOR" => Cell::Xnor(Xnor::new(
@@ -145,7 +146,7 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
         .into_values()
         .flatten()
         .collect::<Vec<usize>>()
-        .into_boxed_slice(),
+        .into(),
       output_connections["Y"][0],
     )),
     "AND" | "$_AND_" => Cell::And(And::new(
@@ -153,7 +154,7 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
         .into_values()
         .flatten()
         .collect::<Vec<usize>>()
-        .into_boxed_slice(),
+        .into(),
       output_connections["Y"][0],
     )),
     "ANDNOT" | "$_ANDNOT_" => Cell::AndNot(AndNot::new(
@@ -161,17 +162,17 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
         .into_values()
         .flatten()
         .collect::<Vec<usize>>()
-        .into_boxed_slice(),
+        .into(),
       output_connections["Y"][0],
     )),
     "DFF" | "$_DFF_P_" => Cell::Dff(Dff::new(
-      Bit::One,
+      Bit::ONE,
       input_connections["C"][0],
       input_connections["D"][0],
       output_connections["Q"][0],
     )),
     "$_SDFF_PP0_" => Cell::DffReset(DffReset::new(
-      Bit::One,
+      Bit::ONE,
       input_connections["D"][0],
       input_connections["C"][0],
       input_connections["R"][0],
@@ -179,66 +180,66 @@ pub fn create_cell(cell: &yosys::Cell) -> Result<Cell, CellError> {
     )),
     "$pos" => Cell::Pos(Pos::new(
       cell.parameters["A_SIGNED"].to_number().unwrap() == 1,
-      input_connections["A"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     "$neg" => Cell::Neg(Neg::new(
       cell.parameters["A_SIGNED"].to_number().unwrap() == 1,
-      input_connections["A"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     // Proc Cells
     "$mux" | "$_MUX_" => Cell::Mux(Mux::new(
       input_connections["S"][0],
-      input_connections["A"].clone().into_boxed_slice(),
-      input_connections["B"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      input_connections["B"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     "$dff" => Cell::Reg(Reg::new(
-      Bit::One,
+      Bit::ONE,
       input_connections["CLK"][0],
-      input_connections["D"].clone().into_boxed_slice(),
-      output_connections["Q"].clone().into_boxed_slice(),
+      input_connections["D"].clone().into(),
+      output_connections["Q"].clone().into(),
     )),
     "$add" => Cell::Add(Add::new(
       // Hacky, fix later
       cell.parameters["A_SIGNED"].to_number().unwrap() == 1,
-      input_connections["A"].clone().into_boxed_slice(),
-      input_connections["B"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      input_connections["B"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     "$sub" => Cell::Sub(Sub::new(
       // Hacky, fix later
       cell.parameters["A_SIGNED"].to_number().unwrap() == 1,
-      input_connections["A"].clone().into_boxed_slice(),
-      input_connections["B"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      input_connections["B"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     "$mul" => Cell::Mul(Mul::new(
       // Hacky, fix later
       cell.parameters["A_SIGNED"].to_number().unwrap()
         == cell.parameters["B_SIGNED"].to_number().unwrap(),
-      input_connections["A"].clone().into_boxed_slice(),
-      input_connections["B"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      input_connections["B"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     "$shl" => Cell::Shl(Shl::new(
       // Hacky, fix later
       cell.parameters["A_SIGNED"].to_number().unwrap() == 1,
-      input_connections["A"].clone().into_boxed_slice(),
-      input_connections["B"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      input_connections["B"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     "$logic_and" => Cell::LogicAnd(LogicAnd::new(
       // Hacky, fix later
-      input_connections["A"].clone().into_boxed_slice(),
-      input_connections["B"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      input_connections["B"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     "$logic_not" => Cell::LogicNot(LogicNot::new(
       // Hacky, fix later
-      input_connections["A"].clone().into_boxed_slice(),
-      output_connections["Y"].clone().into_boxed_slice(),
+      input_connections["A"].clone().into(),
+      output_connections["Y"].clone().into(),
     )),
     _ => return Err(CellError::Unsupported(cell.cell_type.to_string())),
   };
@@ -276,7 +277,7 @@ impl CellFn for Buf {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Nand {
-  input_nets: Box<[usize]>,
+  input_nets: SmallVec<[usize; 64]>,
   output_net: usize,
 }
 
@@ -298,7 +299,7 @@ impl CellFn for Nand {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct And {
-  input_nets: Box<[usize]>,
+  input_nets: SmallVec<[usize; 64]>,
   output_net: usize,
 }
 
@@ -320,7 +321,7 @@ impl CellFn for And {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct AndNot {
-  input_nets: Box<[usize]>,
+  input_nets: SmallVec<[usize; 64]>,
   output_net: usize,
 }
 
@@ -337,7 +338,7 @@ impl CellFn for AndNot {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Or {
-  input_nets: Box<[usize]>,
+  input_nets: SmallVec<[usize; 64]>,
   output_net: usize,
 }
 
@@ -359,7 +360,7 @@ impl CellFn for Or {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Nor {
-  input_nets: Box<[usize]>,
+  input_nets: SmallVec<[usize; 64]>,
   output_net: usize,
 }
 
@@ -381,7 +382,7 @@ impl CellFn for Nor {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Xor {
-  input_nets: Box<[usize]>,
+  input_nets: SmallVec<[usize; 64]>,
   output_net: usize,
 }
 
@@ -403,7 +404,7 @@ impl CellFn for Xor {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Xnor {
-  input_nets: Box<[usize]>,
+  input_nets: SmallVec<[usize; 64]>,
   output_net: usize,
 }
 
@@ -425,7 +426,7 @@ impl CellFn for Xnor {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct OrNot {
-  input_nets: Box<[usize]>,
+  input_nets: SmallVec<[usize; 64]>,
   output_net: usize,
 }
 
@@ -464,7 +465,7 @@ impl DffReset {
       clock_net,
       reset_net,
       data_out_net,
-      last_clock: Bit::Zero,
+      last_clock: Bit::ZERO,
     }
   }
 }
@@ -473,10 +474,10 @@ impl CellFn for DffReset {
   fn eval(&mut self, signals: &mut [Signal]) {
     let clock = !(signals[self.clock_net].get_value() ^ self.polarity);
 
-    if clock == Bit::One && self.last_clock == Bit::Zero {
-      if signals[self.reset_net].get_value() == Bit::One {
+    if clock == Bit::ONE && self.last_clock == Bit::ZERO {
+      if signals[self.reset_net].get_value() == Bit::ONE {
         // Reset
-        signals[self.data_out_net].set_value(Bit::Zero);
+        signals[self.data_out_net].set_value(Bit::ZERO);
       } else {
         signals[self.data_out_net].set_value(signals[self.data_in_net].get_value());
       }
@@ -486,7 +487,7 @@ impl CellFn for DffReset {
   }
 
   fn reset(&mut self) {
-    self.last_clock = Bit::Zero;
+    self.last_clock = Bit::ZERO;
   }
 }
 
@@ -506,7 +507,7 @@ impl Dff {
       data_in_net,
       clock_net,
       data_out_net,
-      last_clock: Bit::Zero,
+      last_clock: Bit::ZERO,
     }
   }
 }
@@ -515,7 +516,7 @@ impl CellFn for Dff {
   fn eval(&mut self, signals: &mut [Signal]) {
     let clock = !(signals[self.clock_net].get_value() ^ self.polarity);
 
-    if clock == Bit::One && self.last_clock == Bit::Zero {
+    if clock == Bit::ONE && self.last_clock == Bit::ZERO {
       signals[self.data_out_net].set_value(signals[self.data_in_net].get_value());
     }
 
@@ -523,16 +524,16 @@ impl CellFn for Dff {
   }
 
   fn reset(&mut self) {
-    self.last_clock = Bit::Zero;
+    self.last_clock = Bit::ZERO;
   }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Reg {
   polarity: Bit,
-  data_in_nets: Box<[usize]>,
+  data_in_nets: SmallVec<[usize; 64]>,
   clock_net: usize,
-  data_out_nets: Box<[usize]>,
+  data_out_nets: SmallVec<[usize; 64]>,
   last_clock: Bit,
 }
 
@@ -540,15 +541,15 @@ impl Reg {
   pub fn new(
     polarity: Bit,
     clock_net: usize,
-    data_in_nets: Box<[usize]>,
-    data_out_nets: Box<[usize]>,
+    data_in_nets: SmallVec<[usize; 64]>,
+    data_out_nets: SmallVec<[usize; 64]>,
   ) -> Self {
     Self {
       polarity,
       data_in_nets,
       clock_net,
       data_out_nets,
-      last_clock: Bit::Zero,
+      last_clock: Bit::ZERO,
     }
   }
 }
@@ -557,7 +558,7 @@ impl CellFn for Reg {
   fn eval(&mut self, signals: &mut [Signal]) {
     let clock = !(signals[self.clock_net].get_value() ^ self.polarity);
 
-    if clock == Bit::One && self.last_clock == Bit::Zero {
+    if clock == Bit::ONE && self.last_clock == Bit::ZERO {
       self
         .data_out_nets
         .iter()
@@ -569,7 +570,7 @@ impl CellFn for Reg {
   }
 
   fn reset(&mut self) {
-    self.last_clock = Bit::Zero;
+    self.last_clock = Bit::ZERO;
   }
 }
 
@@ -577,27 +578,22 @@ impl CellFn for Reg {
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Mux {
   select_net: usize,
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  b_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for Mux {
   fn eval(&mut self, signals: &mut [Signal]) {
-    if signals[self.select_net].get_value() == Bit::One {
-      // Select B
-      self
-        .y_nets
-        .iter()
-        .enumerate()
-        .for_each(|(i, net)| signals[*net].set_value(signals[self.b_nets[i]].get_value()));
+    let sel = signals[self.select_net].get_value();
+    let src_nets = if sel == Bit::ONE {
+      &self.b_nets
     } else {
-      // Select A
-      self
-        .y_nets
-        .iter()
-        .enumerate()
-        .for_each(|(i, net)| signals[*net].set_value(signals[self.a_nets[i]].get_value()));
+      &self.a_nets
+    };
+
+    for (src, dst) in src_nets.iter().zip(self.y_nets.iter()) {
+      signals[*dst].set_value(signals[*src].get_value());
     }
   }
 
@@ -607,9 +603,9 @@ impl CellFn for Mux {
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Add {
   signed: bool,
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  b_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for Add {
@@ -650,9 +646,9 @@ impl CellFn for Add {
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Sub {
   signed: bool,
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  b_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for Sub {
@@ -693,9 +689,9 @@ impl CellFn for Sub {
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Mul {
   signed: bool,
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  b_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for Mul {
@@ -736,8 +732,8 @@ impl CellFn for Mul {
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Pos {
   signed: bool,
-  a_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for Pos {
@@ -770,8 +766,8 @@ impl CellFn for Pos {
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Neg {
   signed: bool,
-  a_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for Neg {
@@ -804,9 +800,9 @@ impl CellFn for Neg {
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Shl {
   signed: bool,
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  b_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for Shl {
@@ -847,9 +843,9 @@ impl CellFn for Shl {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct LogicAnd {
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  b_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for LogicAnd {
@@ -872,8 +868,8 @@ impl CellFn for LogicAnd {
 
     // Hard code as u64 add, fix later
     // Assume only need to set LSB
-    let a = Bit::from(a.to_int::<u64>() != 0);
-    let b = Bit::from(b.to_int::<u64>() != 0);
+    let a = Bit(a.to_int::<u64>() != 0);
+    let b = Bit(b.to_int::<u64>() != 0);
     signals[self.y_nets[0]].set_value(a & b);
   }
 
@@ -882,24 +878,19 @@ impl CellFn for LogicAnd {
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct LogicNot {
-  a_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  a_nets: SmallVec<[usize; 64]>,
+  y_nets: SmallVec<[usize; 64]>,
 }
 
 impl CellFn for LogicNot {
   fn eval(&mut self, signals: &mut [Signal]) {
-    let a = BitVec::from(
-      self
-        .a_nets
-        .iter()
-        .map(|net| signals[*net].get_value())
-        .collect::<Vec<Bit>>(),
-    );
+    let mut val = Bit::ZERO;
+    self
+      .a_nets
+      .iter()
+      .for_each(|net| val = val | signals[*net].get_value());
 
-    // Hard code as u64 add, fix later
-    // Assume only need to set LSB
-    let a = Bit::from(a.to_int::<u64>() != 0);
-    signals[self.y_nets[0]].set_value(!a);
+    signals[self.y_nets[0]].set_value(!val);
   }
 
   fn reset(&mut self) {}

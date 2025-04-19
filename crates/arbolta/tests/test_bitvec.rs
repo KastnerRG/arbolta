@@ -8,14 +8,14 @@ use rstest::rstest;
 
 #[rstest] // TODO: Generate random bit patterns and check
 #[case(vec![
-  Bit::One,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
 ], "00100101")]
 fn test_bits_to_str(#[case] bits: Vec<Bit>, #[case] expected: String) {
   let bits = BitVec { bits: bits };
@@ -24,14 +24,14 @@ fn test_bits_to_str(#[case] bits: Vec<Bit>, #[case] expected: String) {
 
 #[rstest]
 #[case("00100101", vec![
-  Bit::One,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
 ]
 )]
 fn test_str_to_bits(#[case] val: String, #[case] expected: Vec<Bit>) {
@@ -49,14 +49,14 @@ fn test_str_to_bits(#[case] val: String, #[case] expected: Vec<Bit>) {
   false,
   true,
 ], vec![
-  Bit::One,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
 ]
 )]
 fn test_bools_to_bits(#[case] vals: Vec<bool>, #[case] expected: Vec<Bit>) {

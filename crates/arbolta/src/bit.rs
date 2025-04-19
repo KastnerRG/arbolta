@@ -14,11 +14,7 @@ use thiserror::Error;
 
 /// Primitive signal value
 #[derive(Debug, Clone, Eq, Copy, PartialEq, Deserialize, Serialize, Default, Encode, Decode)]
-pub enum Bit {
-  #[default]
-  Zero,
-  One,
-}
+pub struct Bit(pub bool);
 
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("error converting bits")]
@@ -27,9 +23,9 @@ pub struct ParseBitError;
 impl From<bool> for Bit {
   fn from(val: bool) -> Self {
     if val {
-      Self::One
+      Self::ONE
     } else {
-      Self::Zero
+      Self::ZERO
     }
   }
 }
@@ -37,8 +33,8 @@ impl From<bool> for Bit {
 impl From<Bit> for bool {
   fn from(val: Bit) -> Self {
     match val {
-      Bit::Zero => false,
-      Bit::One => true,
+      Bit::ZERO => false,
+      Bit::ONE => true,
     }
   }
 }
@@ -47,8 +43,8 @@ impl TryFrom<char> for Bit {
   type Error = ParseBitError;
   fn try_from(val: char) -> Result<Self, Self::Error> {
     match val {
-      '0' => Ok(Self::Zero),
-      '1' => Ok(Self::One),
+      '0' => Ok(Self(false)),
+      '1' => Ok(Self(true)),
       _ => Err(ParseBitError),
     }
   }
@@ -57,18 +53,21 @@ impl TryFrom<char> for Bit {
 impl From<Bit> for char {
   fn from(bit: Bit) -> Self {
     match bit {
-      Bit::Zero => '0',
-      Bit::One => '1',
+      Bit(false) => '0',
+      Bit(true) => '1',
     }
   }
 }
 
 impl Bit {
+  pub const ZERO: Bit = Bit(false);
+  pub const ONE: Bit = Bit(true);
+
   pub fn from_int<T: PrimInt>(val: T) -> Result<Self, ParseBitError> {
     if val == T::zero() {
-      Ok(Self::Zero)
+      Ok(Self(false))
     } else if val == T::one() {
-      Ok(Self::One)
+      Ok(Self(true))
     } else {
       Err(ParseBitError)
     }
@@ -76,8 +75,8 @@ impl Bit {
 
   pub fn to_int<T: PrimInt>(self) -> T {
     match self {
-      Self::Zero => T::zero(),
-      Self::One => T::one(),
+      Self(false) => T::zero(),
+      Self(true) => T::one(),
     }
   }
 }
@@ -95,10 +94,7 @@ impl Not for Bit {
   type Output = Self;
 
   fn not(self) -> Self::Output {
-    match self {
-      Bit::Zero => Bit::One,
-      Bit::One => Bit::Zero,
-    }
+    Bit(!self.0)
   }
 }
 
@@ -106,10 +102,7 @@ impl BitAnd for Bit {
   type Output = Self;
 
   fn bitand(self, rhs: Self) -> Self::Output {
-    match &[self, rhs] {
-      [Bit::Zero, Bit::Zero] | [Bit::Zero, Bit::One] | [Bit::One, Bit::Zero] => Bit::Zero,
-      [Bit::One, Bit::One] => Bit::One,
-    }
+    Bit(self.0 & rhs.0)
   }
 }
 
@@ -117,10 +110,7 @@ impl BitOr for Bit {
   type Output = Self;
 
   fn bitor(self, rhs: Self) -> Self::Output {
-    match &[self, rhs] {
-      [Bit::Zero, Bit::Zero] => Bit::Zero,
-      [Bit::Zero, Bit::One] | [Bit::One, Bit::Zero] | [Bit::One, Bit::One] => Bit::One,
-    }
+    Bit(self.0 | rhs.0)
   }
 }
 
@@ -128,10 +118,7 @@ impl BitXor for Bit {
   type Output = Self;
 
   fn bitxor(self, rhs: Self) -> Self::Output {
-    match &[self, rhs] {
-      [Bit::Zero, Bit::Zero] | [Bit::One, Bit::One] => Bit::Zero,
-      [Bit::Zero, Bit::One] | [Bit::One, Bit::Zero] => Bit::One,
-    }
+    Bit(self.0 ^ rhs.0)
   }
 }
 
@@ -185,19 +172,19 @@ impl From<BitVec> for Vec<Bit> {
 
 impl From<&BitVec> for Vec<bool> {
   fn from(val: &BitVec) -> Self {
-    val.bits.iter().rev().map(|b| (*b).into()).collect()
+    val.bits.iter().rev().map(|b| b.0).collect()
   }
 }
 
 impl From<BitVec> for Vec<bool> {
   fn from(val: BitVec) -> Self {
-    val.bits.iter().rev().map(|b| (*b).into()).collect()
+    val.bits.iter().rev().map(|b| b.0).collect()
   }
 }
 
 impl From<&[bool]> for BitVec {
   fn from(vals: &[bool]) -> Self {
-    let bits: Vec<Bit> = vals.iter().rev().map(|b| (*b).into()).collect();
+    let bits: Vec<Bit> = vals.iter().rev().map(|b| Bit(*b)).collect();
     Self::from(bits)
   }
 }
@@ -497,7 +484,7 @@ impl BitVec {
           .bits
           .iter()
           .enumerate()
-          .for_each(|(i, b)| buffer_slice[i] = (*b).into());
+          .for_each(|(i, b)| buffer_slice[i] = b.0);
         Ok(())
       }
     }

@@ -49,10 +49,10 @@ fn generate_cell(
 }
 
 #[rstest]
-#[case("NOT", Bit::Zero, Bit::One)]
-#[case("NOT", Bit::One, Bit::Zero)]
-#[case("BUF", Bit::Zero, Bit::Zero)]
-#[case("BUF", Bit::One, Bit::One)]
+#[case("NOT", Bit::ZERO, Bit::ONE)]
+#[case("NOT", Bit::ONE, Bit::ZERO)]
+#[case("BUF", Bit::ZERO, Bit::ZERO)]
+#[case("BUF", Bit::ONE, Bit::ONE)]
 fn test_cell_1_input(#[case] cell_type: &str, #[case] a: Bit, #[case] expected: Bit) {
   let inputs = HashMap::from([("A", 1)]);
   let outputs = HashMap::from([("Y", 1)]);
@@ -63,38 +63,38 @@ fn test_cell_1_input(#[case] cell_type: &str, #[case] a: Bit, #[case] expected: 
 }
 
 #[rstest]
-#[case("AND", Bit::Zero, Bit::Zero, Bit::Zero)]
-#[case("AND", Bit::Zero, Bit::One, Bit::Zero)]
-#[case("AND", Bit::One, Bit::Zero, Bit::Zero)]
-#[case("AND", Bit::One, Bit::One, Bit::One)]
-#[case("ANDNOT", Bit::Zero, Bit::Zero, Bit::Zero)]
-#[case("ANDNOT", Bit::Zero, Bit::One, Bit::Zero)]
-#[case("ANDNOT", Bit::One, Bit::Zero, Bit::One)]
-#[case("ANDNOT", Bit::One, Bit::One, Bit::Zero)]
-#[case("NOR", Bit::Zero, Bit::Zero, Bit::One)]
-#[case("NOR", Bit::Zero, Bit::One, Bit::Zero)]
-#[case("NOR", Bit::One, Bit::Zero, Bit::Zero)]
-#[case("NOR", Bit::One, Bit::One, Bit::Zero)]
-#[case("NAND", Bit::Zero, Bit::Zero, Bit::One)]
-#[case("NAND", Bit::Zero, Bit::One, Bit::One)]
-#[case("NAND", Bit::One, Bit::Zero, Bit::One)]
-#[case("NAND", Bit::One, Bit::One, Bit::Zero)]
-#[case("OR", Bit::Zero, Bit::Zero, Bit::Zero)]
-#[case("OR", Bit::Zero, Bit::One, Bit::One)]
-#[case("OR", Bit::One, Bit::Zero, Bit::One)]
-#[case("OR", Bit::One, Bit::One, Bit::One)]
-#[case("XOR", Bit::Zero, Bit::Zero, Bit::Zero)]
-#[case("XOR", Bit::Zero, Bit::One, Bit::One)]
-#[case("XOR", Bit::One, Bit::Zero, Bit::One)]
-#[case("XOR", Bit::One, Bit::One, Bit::Zero)]
-#[case("XNOR", Bit::Zero, Bit::Zero, Bit::One)]
-#[case("XNOR", Bit::Zero, Bit::One, Bit::Zero)]
-#[case("XNOR", Bit::One, Bit::Zero, Bit::Zero)]
-#[case("XNOR", Bit::One, Bit::One, Bit::One)]
-#[case("ORNOT", Bit::Zero, Bit::Zero, Bit::One)]
-#[case("ORNOT", Bit::Zero, Bit::One, Bit::Zero)]
-#[case("ORNOT", Bit::One, Bit::Zero, Bit::One)]
-#[case("ORNOT", Bit::One, Bit::One, Bit::One)]
+#[case("AND", Bit::ZERO, Bit::ZERO, Bit::ZERO)]
+#[case("AND", Bit::ZERO, Bit::ONE, Bit::ZERO)]
+#[case("AND", Bit::ONE, Bit::ZERO, Bit::ZERO)]
+#[case("AND", Bit::ONE, Bit::ONE, Bit::ONE)]
+#[case("ANDNOT", Bit::ZERO, Bit::ZERO, Bit::ZERO)]
+#[case("ANDNOT", Bit::ZERO, Bit::ONE, Bit::ZERO)]
+#[case("ANDNOT", Bit::ONE, Bit::ZERO, Bit::ONE)]
+#[case("ANDNOT", Bit::ONE, Bit::ONE, Bit::ZERO)]
+#[case("NOR", Bit::ZERO, Bit::ZERO, Bit::ONE)]
+#[case("NOR", Bit::ZERO, Bit::ONE, Bit::ZERO)]
+#[case("NOR", Bit::ONE, Bit::ZERO, Bit::ZERO)]
+#[case("NOR", Bit::ONE, Bit::ONE, Bit::ZERO)]
+#[case("NAND", Bit::ZERO, Bit::ZERO, Bit::ONE)]
+#[case("NAND", Bit::ZERO, Bit::ONE, Bit::ONE)]
+#[case("NAND", Bit::ONE, Bit::ZERO, Bit::ONE)]
+#[case("NAND", Bit::ONE, Bit::ONE, Bit::ZERO)]
+#[case("OR", Bit::ZERO, Bit::ZERO, Bit::ZERO)]
+#[case("OR", Bit::ZERO, Bit::ONE, Bit::ONE)]
+#[case("OR", Bit::ONE, Bit::ZERO, Bit::ONE)]
+#[case("OR", Bit::ONE, Bit::ONE, Bit::ONE)]
+#[case("XOR", Bit::ZERO, Bit::ZERO, Bit::ZERO)]
+#[case("XOR", Bit::ZERO, Bit::ONE, Bit::ONE)]
+#[case("XOR", Bit::ONE, Bit::ZERO, Bit::ONE)]
+#[case("XOR", Bit::ONE, Bit::ONE, Bit::ZERO)]
+#[case("XNOR", Bit::ZERO, Bit::ZERO, Bit::ONE)]
+#[case("XNOR", Bit::ZERO, Bit::ONE, Bit::ZERO)]
+#[case("XNOR", Bit::ONE, Bit::ZERO, Bit::ZERO)]
+#[case("XNOR", Bit::ONE, Bit::ONE, Bit::ONE)]
+#[case("ORNOT", Bit::ZERO, Bit::ZERO, Bit::ONE)]
+#[case("ORNOT", Bit::ZERO, Bit::ONE, Bit::ZERO)]
+#[case("ORNOT", Bit::ONE, Bit::ZERO, Bit::ONE)]
+#[case("ORNOT", Bit::ONE, Bit::ONE, Bit::ONE)]
 fn test_cell_2_input(
   #[case] cell_type: &str,
   #[case] a: Bit,
@@ -116,14 +116,14 @@ fn test_cell_2_input(
 }
 
 #[rstest]
-#[case("OR", Bit::Zero, Bit::Zero, Bit::Zero, Bit::Zero)]
-#[case("OR", Bit::Zero, Bit::Zero, Bit::One, Bit::One)]
-#[case("OR", Bit::Zero, Bit::One, Bit::Zero, Bit::One)]
-#[case("OR", Bit::Zero, Bit::One, Bit::One, Bit::One)]
-#[case("OR", Bit::One, Bit::Zero, Bit::Zero, Bit::One)]
-#[case("OR", Bit::One, Bit::Zero, Bit::One, Bit::One)]
-#[case("OR", Bit::One, Bit::One, Bit::Zero, Bit::One)]
-#[case("OR", Bit::One, Bit::One, Bit::One, Bit::One)]
+#[case("OR", Bit::ZERO, Bit::ZERO, Bit::ZERO, Bit::ZERO)]
+#[case("OR", Bit::ZERO, Bit::ZERO, Bit::ONE, Bit::ONE)]
+#[case("OR", Bit::ZERO, Bit::ONE, Bit::ZERO, Bit::ONE)]
+#[case("OR", Bit::ZERO, Bit::ONE, Bit::ONE, Bit::ONE)]
+#[case("OR", Bit::ONE, Bit::ZERO, Bit::ZERO, Bit::ONE)]
+#[case("OR", Bit::ONE, Bit::ZERO, Bit::ONE, Bit::ONE)]
+#[case("OR", Bit::ONE, Bit::ONE, Bit::ZERO, Bit::ONE)]
+#[case("OR", Bit::ONE, Bit::ONE, Bit::ONE, Bit::ONE)]
 fn test_cell_3_input(
   #[case] cell_type: &str,
   #[case] a: Bit,
@@ -150,60 +150,60 @@ fn test_cell_3_input(
 fn test_cell_dff_p() {
   // D, C, Q
   let (data_in, clock, data_out) = (0, 1, 2);
-  let mut cell = Dff::new(Bit::One, clock, data_in, data_out);
+  let mut cell = Dff::new(Bit::ONE, clock, data_in, data_out);
   let mut signals = vec![Signal::default(); 3].into_boxed_slice();
 
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::Zero);
+  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
 
-  signals[data_in].set_value(Bit::One);
+  signals[data_in].set_value(Bit::ONE);
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::Zero);
+  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
 
-  signals[clock].set_value(Bit::One); // Rising edge
+  signals[clock].set_value(Bit::ONE); // Rising edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::One);
+  assert_eq!(signals[data_out].get_value(), Bit::ONE);
 
-  signals[clock].set_value(Bit::Zero); // Falling edge
+  signals[clock].set_value(Bit::ZERO); // Falling edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::One);
+  assert_eq!(signals[data_out].get_value(), Bit::ONE);
 
-  signals[data_in].set_value(Bit::Zero);
+  signals[data_in].set_value(Bit::ZERO);
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::One);
+  assert_eq!(signals[data_out].get_value(), Bit::ONE);
 
-  signals[clock].set_value(Bit::One); // Rising edge
+  signals[clock].set_value(Bit::ONE); // Rising edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::Zero);
+  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
 }
 
 #[rstest]
 fn test_cell_sdff_pp() {
   // D, C, R, Q
   let (data_in, clock, reset, data_out) = (0, 1, 2, 3);
-  let mut cell = DffReset::new(Bit::One, data_in, clock, reset, data_out);
+  let mut cell = DffReset::new(Bit::ONE, data_in, clock, reset, data_out);
   let mut signals = vec![Signal::default(); 4].into_boxed_slice();
 
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::Zero);
+  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
 
-  signals[data_in].set_value(Bit::One);
+  signals[data_in].set_value(Bit::ONE);
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::Zero);
+  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
 
-  signals[clock].set_value(Bit::One); // Rising edge
+  signals[clock].set_value(Bit::ONE); // Rising edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::One);
+  assert_eq!(signals[data_out].get_value(), Bit::ONE);
 
-  signals[clock].set_value(Bit::Zero); // Falling edge
+  signals[clock].set_value(Bit::ZERO); // Falling edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::One);
+  assert_eq!(signals[data_out].get_value(), Bit::ONE);
 
-  signals[reset].set_value(Bit::One);
+  signals[reset].set_value(Bit::ONE);
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::One);
+  assert_eq!(signals[data_out].get_value(), Bit::ONE);
 
-  signals[clock].set_value(Bit::One); // Rising edge
+  signals[clock].set_value(Bit::ONE); // Rising edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::Zero);
+  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
 }

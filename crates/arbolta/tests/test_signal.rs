@@ -8,7 +8,7 @@ use arbolta::signal::Signal;
 fn test_signal_net_init() {
   let x = Signal::default();
 
-  assert_eq!(x.get_value(), Bit::Zero);
+  assert_eq!(x.get_value(), Bit::ZERO);
   assert_eq!(x.get_toggle_count_falling(), 0);
   assert_eq!(x.get_toggle_count_rising(), 0);
   assert_eq!(x.get_total_toggle_count(), 0);
@@ -18,9 +18,9 @@ fn test_signal_net_init() {
 fn test_signal_net_set_value() {
   let mut x = Signal::default();
 
-  assert_eq!(x.get_value(), Bit::Zero);
-  x.set_value(Bit::One);
-  assert_eq!(x.get_value(), Bit::One);
+  assert_eq!(x.get_value(), Bit::ZERO);
+  x.set_value(Bit::ONE);
+  assert_eq!(x.get_value(), Bit::ONE);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn test_signal_net_toggle_rising() {
   assert_eq!(x.get_toggle_count_falling(), 0);
   assert_eq!(x.get_toggle_count_rising(), 0);
 
-  x.set_value(Bit::One);
+  x.set_value(Bit::ONE);
 
   assert_eq!(x.get_total_toggle_count(), 1);
   assert_eq!(x.get_toggle_count_falling(), 0);
@@ -41,13 +41,13 @@ fn test_signal_net_toggle_rising() {
 #[test]
 fn test_signal_net_toggle_falling() {
   let mut x = Signal::default();
-  x.value = Bit::One;
+  x.value = Bit::ONE;
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);
   assert_eq!(x.get_toggle_count_rising(), 0);
 
-  x.set_value(Bit::Zero);
+  x.set_value(Bit::ZERO);
 
   assert_eq!(x.get_total_toggle_count(), 1);
   assert_eq!(x.get_toggle_count_falling(), 1);
@@ -62,7 +62,7 @@ fn test_signal_net_toggle_same_zero() {
   assert_eq!(x.get_toggle_count_falling(), 0);
   assert_eq!(x.get_toggle_count_rising(), 0);
 
-  x.set_value(Bit::Zero);
+  x.set_value(Bit::ZERO);
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);
@@ -72,13 +72,13 @@ fn test_signal_net_toggle_same_zero() {
 #[test]
 fn test_signal_net_toggle_same_one() {
   let mut x = Signal::default();
-  x.value = Bit::One;
+  x.value = Bit::ONE;
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);
   assert_eq!(x.get_toggle_count_rising(), 0);
 
-  x.set_value(Bit::One);
+  x.set_value(Bit::ONE);
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);

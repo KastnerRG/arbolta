@@ -29,6 +29,7 @@ class PortConfig:
     polarity: bool, optional
         Clock polarity of port.
     """
+
     shape: Tuple[int, int] = (1, 1)
     dtype: np.dtype = np.uint32
     clock: bool = False
@@ -47,6 +48,7 @@ class DesignConfig(TypedDict):
     config : PortConfig
         Configuration for port
     """
+
     port: str
     config: PortConfig
 
@@ -58,17 +60,14 @@ class Port:
 
 
 class HardwarePorts:
-
     def __init__(self, config: DesignConfig, design: Design):
-
         _ports: Dict[str, Port] = {}
 
         port_name: str
         port_config: PortConfig
         for port_name, port_config in config.items():
             if port_config.reset and port_config.clock:
-                raise AttributeError(
-                    f"Port `{port_name}` cannot be a reset and clock")
+                raise AttributeError(f"Port `{port_name}` cannot be a reset and clock")
             if port_config.reset:
                 design.set_reset(port_name, bool(port_config.polarity))
             if port_config.clock:
@@ -76,19 +75,20 @@ class HardwarePorts:
 
             design.set_port_shape(port_name, port_config.shape)
             _ports[port_name] = Port(
-                np.zeros(port_config.shape[1], dtype=port_config.dtype))
+                np.zeros(port_config.shape[1], dtype=port_config.dtype)
+            )
 
-        super().__setattr__('_ports', _ports)
-        super().__setattr__('_design', design)
+        super().__setattr__("_ports", _ports)
+        super().__setattr__("_design", design)
 
     def __getattr__(self, name: str) -> Any:
-        if '_ports' in self.__dict__ and '_design' in self.__dict__:
-            _ports: dict[str, Port] = self.__dict__['_ports']
+        if "_ports" in self.__dict__ and "_design" in self.__dict__:
+            _ports: dict[str, Port] = self.__dict__["_ports"]
 
             if name not in _ports:
                 raise AttributeError(f"Port `{name}` does not exist")
 
-            _design = self.__dict__['_design']
+            _design = self.__dict__["_design"]
 
             if not _design.is_port_input(name):
                 _design.get_port_numpy(name, _ports[name].data)
@@ -99,8 +99,8 @@ class HardwarePorts:
             raise AttributeError("Ports not initialized")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if '_ports' in self.__dict__ and '_design' in self.__dict__:
-            _ports: dict[str, Port] = self.__dict__['_ports']
+        if "_ports" in self.__dict__ and "_design" in self.__dict__:
+            _ports: dict[str, Port] = self.__dict__["_ports"]
 
             if name not in _ports:
                 raise AttributeError(f"Port `{name}` does not exist")
@@ -113,9 +113,7 @@ class HardwarePorts:
 
 
 class HardwareDesign:
-
-    def __init__(self, top_module: str, netlist_path: str,
-                 config: DesignConfig):
+    def __init__(self, top_module: str, netlist_path: str, config: DesignConfig):
         """
         Parameters
         ----------
@@ -178,8 +176,7 @@ class HardwareDesign:
 
         self.design.eval_clocked(cycles)
 
-    def cell_breakdown(self,
-                       module_name: Optional[str] = None) -> Dict[str, int]:
+    def cell_breakdown(self, module_name: Optional[str] = None) -> Dict[str, int]:
         """
         Get count of each cell type in module.
 
@@ -245,8 +242,7 @@ class HardwareDesign:
             AttributeError: Specified module doesn't exist in design.
         """
         if module_name is None:
-            return self.design.get_module_total_toggle_count(
-                self.design.top_module)
+            return self.design.get_module_total_toggle_count(self.design.top_module)
         else:
             return self.design.get_module_total_toggle_count(module_name)
 

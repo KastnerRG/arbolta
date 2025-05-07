@@ -3,8 +3,9 @@ import torch
 from arbolta import HardwareDesign
 
 
-def run_systolic_array(design: HardwareDesign, x: torch.Tensor,
-                       k: torch.Tensor) -> torch.Tensor:
+def run_systolic_array(
+    design: HardwareDesign, x: torch.Tensor, k: torch.Tensor
+) -> torch.Tensor:
     """
     Run inputs through systolic array.
     Expects x: (K,R), k: (K,C) -> y: (C,R)

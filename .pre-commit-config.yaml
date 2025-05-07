@@ -23,17 +23,26 @@ repos:
         name: clippy (rust)
       - id: cargo-check
         name: cargo-check (rust)
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.11.8
     hooks:
-      - id: isort
-        name: isort (python)
-  - repo: https://github.com/google/yapf
-    rev: v0.43.0
-    hooks:
-      - id: yapf
-        name: yapf (python)
-        args: ["-i"]
+      # Run the linter.
+      - id: ruff
+      # Run the formatter.
+      - id: ruff-format
+
+  # - repo: https://github.com/pycqa/isort
+  #   rev: 5.13.2
+  #   hooks:
+  #     - id: isort
+  #       name: isort (python)
+  # - repo: https://github.com/google/yapf
+  #   rev: v0.43.0
+  #   hooks:
+  #     - id: yapf
+  #       name: yapf (python)
+  #       args: ["-i"]
   - repo: https://github.com/srstevenson/nb-clean
     rev: 4.0.1
     hooks:

@@ -9,7 +9,7 @@ name = "arbolta"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0.24.1"
+pyo3 = "0.24.2"
 numpy = "0.24.0"
 num-traits = "0.2"
 serde = { version = "1.0", features = ["derive"] }

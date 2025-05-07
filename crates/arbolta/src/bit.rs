@@ -22,11 +22,7 @@ pub struct ParseBitError;
 
 impl From<bool> for Bit {
   fn from(val: bool) -> Self {
-    if val {
-      Self::ONE
-    } else {
-      Self::ZERO
-    }
+    if val { Self::ONE } else { Self::ZERO }
   }
 }
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use arbolta::bit::Bit;
-use arbolta::cell::{create_cell, Cell, CellFn, Dff, DffReset};
+use arbolta::cell::{Cell, CellFn, Dff, DffReset, create_cell};
 use arbolta::signal::Signal;
 
 use rstest::rstest;

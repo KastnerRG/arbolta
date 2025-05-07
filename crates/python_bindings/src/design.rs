@@ -287,7 +287,7 @@ impl PyDesign {
       _ => {
         return Err(PyValueError::new_err(format!(
           "Unsupported item type: {item_type}"
-        )))
+        )));
       }
     };
     match self.module.set_port_bits(name, &bits) {

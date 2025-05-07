@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use arbolta::bit::{Bit, BitVec};
-use ndarray::{array, Array1};
+use ndarray::{Array1, array};
 
 use rstest::rstest;
 

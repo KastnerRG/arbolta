@@ -14,16 +14,20 @@ fn generate_module(
   parameters: Option<HashMap<&str, &str>>,
 ) -> HardwareModule {
   let mut module = yosys::Module::default();
-  let mut cell = yosys::Cell::default();
-  cell.cell_type = cell_type.to_string();
+  let mut cell = yosys::Cell {
+    cell_type: cell_type.to_string(),
+    ..Default::default()
+  };
 
   let mut num_nets = 2;
   for (name, size) in inputs.iter() {
     let bits: Vec<yosys::BitVal> = (0..*size).map(|i| yosys::BitVal::N(num_nets + i)).collect();
     num_nets += size;
 
-    let mut netname = yosys::Netname::default();
-    netname.bits = bits.clone();
+    let netname = yosys::Netname {
+      bits: bits.clone(),
+      ..Default::default()
+    };
 
     let port = yosys::Port {
       direction: yosys::PortDirection::Input,
@@ -45,8 +49,10 @@ fn generate_module(
     let bits: Vec<yosys::BitVal> = (0..*size).map(|i| yosys::BitVal::N(num_nets + i)).collect();
     num_nets += size;
 
-    let mut netname = yosys::Netname::default();
-    netname.bits = bits.clone();
+    let netname = yosys::Netname {
+      bits: bits.clone(),
+      ..Default::default()
+    };
 
     let port = yosys::Port {
       direction: yosys::PortDirection::Output,

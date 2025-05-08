@@ -3,6 +3,7 @@
 
 use crate::bit::{Bit, BitVec};
 use crate::signal::Signal;
+use anyhow::Result;
 use bincode::{Decode, Encode};
 use ndarray::{Array1, ArrayView1};
 use num_traits::PrimInt;
@@ -27,8 +28,8 @@ pub struct Port {
 
 #[derive(Debug, Error)]
 pub enum PortError {
-  #[error("tried to set input port")]
-  Direction,
+  #[error("{0}")]
+  Direction(String),
   #[error("couldn't convert port to type")]
   Conversion,
   #[error("incompatible shapes: requested={requested:?}, actual={actual:?}")]
@@ -39,9 +40,9 @@ pub enum PortError {
 }
 
 impl Port {
-  pub fn new(port: &yosys::Port) -> Self {
+  pub fn new(port: &yosys::Port) -> Result<Self> {
     let direction = match port.direction {
-      yosys::PortDirection::InOut => todo!("Inout not supported"),
+      yosys::PortDirection::InOut => Err(PortError::Direction("Inout not supported".to_string()))?,
       yosys::PortDirection::Input => PortDirection::Input,
       yosys::PortDirection::Output => PortDirection::Output,
     };
@@ -50,31 +51,31 @@ impl Port {
       .bits
       .iter()
       .map(|bit| match bit {
-        yosys::BitVal::N(net) => *net,
+        yosys::BitVal::N(net) => Ok(*net),
         yosys::BitVal::S(constant) => match constant {
-          yosys::SpecialBit::_0 => 0, // Global 0
-          yosys::SpecialBit::_1 => 1, // Global 1
-          yosys::SpecialBit::X => todo!("X not supported."),
-          yosys::SpecialBit::Z => todo!("Z not supported."),
+          yosys::SpecialBit::_0 => Ok(0), // Global 0
+          yosys::SpecialBit::_1 => Ok(1), // Global 1
+          yosys::SpecialBit::X => Err(PortError::Direction("X not supported.".to_string())),
+          yosys::SpecialBit::Z => Err(PortError::Direction("Z not supported.".to_string())),
         },
       })
-      .collect();
+      .collect::<Result<_, _>>()?;
 
     let shape = [1, nets.len()];
 
-    Self {
+    Ok(Self {
       direction,
       nets: nets.into(),
       shape,
-    }
+    })
   }
 
-  pub fn set_shape(&mut self, shape: &[usize; 2]) -> Result<(), PortError> {
+  pub fn set_shape(&mut self, shape: &[usize; 2]) -> Result<()> {
     if shape[0] * shape[1] != self.nets.len() {
-      return Err(PortError::Shape {
+      Err(PortError::Shape {
         requested: *shape,
         actual: self.shape,
-      });
+      })?;
     }
 
     (self.shape[0], self.shape[1]) = (shape[0], shape[1]);
@@ -96,11 +97,8 @@ impl Port {
     )
   }
 
-  pub fn set_bits(&self, vals: &BitVec, signals: &mut [Signal]) -> Result<(), PortError> {
-    if self.direction == PortDirection::Output {
-      return Err(PortError::Direction);
-    }
-
+  pub fn set_bits(&self, vals: &BitVec, signals: &mut [Signal]) -> Result<()> {
+    // Should we check direction?
     for (dst, val) in self.nets.iter().zip(vals.bits.iter()) {
       signals[*dst].set_value(*val);
     }
@@ -116,14 +114,9 @@ impl Port {
     &self,
     val: T,
     signals: &mut [Signal],
-  ) -> Result<(), PortError> {
-    if self.direction == PortDirection::Output {
-      return Err(PortError::Direction);
-    }
-
-    let Ok(bits) = BitVec::from_int(val) else {
-      return Err(PortError::Direction);
-    };
+  ) -> Result<()> {
+    // Should we check direction?
+    let bits = BitVec::from_int(val)?;
 
     self.set_bits(&bits, signals)
   }
@@ -133,24 +126,17 @@ impl Port {
     self.get_bits(signals).to_ints_sized(elem_size)
   }
 
-  pub fn set_int_vec<T: PrimInt>(
-    &self,
-    vals: &[T],
-    signals: &mut [Signal],
-  ) -> Result<(), PortError> {
+  pub fn set_int_vec<T: PrimInt>(&self, vals: &[T], signals: &mut [Signal]) -> Result<()> {
     if vals.len() != self.shape[0] {
-      return Err(PortError::Shape {
+      Err(PortError::Shape {
         requested: [vals.len(), std::mem::size_of::<T>() * 8],
         actual: self.shape,
-      });
+      })?;
     }
 
     let elem_size = self.shape[1];
-
-    match BitVec::from_ints_sized(vals, elem_size) {
-      Ok(bits) => self.set_bits(&bits, signals),
-      Err(_) => Err(PortError::Conversion),
-    }
+    let bits = BitVec::from_ints_sized(vals, elem_size)?;
+    self.set_bits(&bits, signals)
   }
 
   pub fn get_ndarray<T: PrimInt + std::ops::BitXorAssign>(&self, signals: &[Signal]) -> Array1<T> {
@@ -158,24 +144,18 @@ impl Port {
     self.get_bits(signals).to_int_ndarray_sized(elem_size)
   }
 
-  pub fn set_ndarray<T: PrimInt>(
-    &self,
-    vals: ArrayView1<T>,
-    signals: &mut [Signal],
-  ) -> Result<(), PortError> {
+  pub fn set_ndarray<T: PrimInt>(&self, vals: ArrayView1<T>, signals: &mut [Signal]) -> Result<()> {
     if vals.len() != self.shape[0] {
-      return Err(PortError::Shape {
+      Err(PortError::Shape {
         requested: [vals.len(), std::mem::size_of::<T>() * 8],
         actual: self.shape,
-      });
+      })?;
     }
 
     let elem_size = self.shape[1];
 
-    match BitVec::from_int_ndarray_sized(vals, elem_size) {
-      Ok(bits) => self.set_bits(&bits, signals),
-      Err(_) => Err(PortError::Conversion),
-    }
+    let bits = BitVec::from_int_ndarray_sized(vals, elem_size)?;
+    self.set_bits(&bits, signals)
   }
 
   pub fn get_string(&self, signals: &[Signal]) -> String {

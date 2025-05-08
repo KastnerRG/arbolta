@@ -15,8 +15,10 @@ fn generate_cell(
   outputs: HashMap<&str, usize>,
   parameters: Option<HashMap<&str, &str>>,
 ) -> Cell {
-  let mut cell = yosys::Cell::default();
-  cell.cell_type = cell_type.to_string();
+  let mut cell = yosys::Cell {
+    cell_type: cell_type.to_string(),
+    ..Default::default()
+  };
 
   let mut num_nets = 0;
   for (name, size) in inputs.iter() {

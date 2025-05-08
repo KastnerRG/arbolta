@@ -2,9 +2,10 @@
 name = "arbolta"
 version = "0.1.0"
 authors = ["AMD Research & Advanced Development"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
+anyhow = "1.0.98"
 indexmap = "2.9.0"
 tempfile = "3.19.1"
 derive_more = { version = "2", features = ["full"] }

@@ -1,10 +1,11 @@
 // Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-use super::port::{Port, PortDirection, PortError};
+use super::port::{Port, PortDirection};
 use crate::bit::{Bit, BitVec};
-use crate::cell::{create_cell, Cell, CellError, CellFn};
+use crate::cell::{Cell, CellError, CellFn, create_cell};
 use crate::signal::Signal;
+use anyhow::Result;
 use bincode::{Decode, Encode};
 use ndarray::{Array1, ArrayView1};
 use num_traits::PrimInt;
@@ -36,36 +37,22 @@ pub struct HardwareModule {
 pub enum ModuleError {
   #[error("couldn't load netlist `{0}`")]
   Netlist(String),
-  #[error("{0}")]
-  CellError(#[from] CellError),
   #[error("module does not have port `{0}`")]
   MissingPort(String),
-  #[error("error accessing port `{0}`: {1}")]
-  Port(String, PortError),
   #[error("module does not have signal `{0}`")]
   MissingSignal(String),
   #[error("module does not have net `{0}`")]
   MissingNet(usize),
-  #[error("module `{0}` does not exist")]
-  MissingModule(String),
-  #[error("{0}")]
-  FlexReaderError(#[from] flexbuffers::ReaderError),
-  #[error("{0}")]
-  DeserializeError(#[from] flexbuffers::DeserializationError),
-  #[error("{0}")]
-  SerializeError(#[from] flexbuffers::SerializationError),
-  #[error("{0}")]
-  IoError(#[from] std::io::Error),
 }
 
 impl HardwareModule {
-  pub fn load(path: &str) -> Result<Self, ModuleError> {
+  pub fn load(path: &str) -> Result<Self> {
     let serialized = std::fs::read(path)?;
     let reader = flexbuffers::Reader::get_root(serialized.as_slice())?;
     Ok(Self::deserialize(reader)?)
   }
 
-  pub fn save(&self, path: &str) -> Result<(), ModuleError> {
+  pub fn save(&self, path: &str) -> Result<()> {
     let mut serializer = flexbuffers::FlexbufferSerializer::new();
     self.serialize(&mut serializer)?;
     let mut file_output = std::fs::File::create(path)?;
@@ -73,30 +60,20 @@ impl HardwareModule {
     Ok(())
   }
 
-  pub fn new_from_str(raw_netlist: &str, top_module: &str) -> Result<Self, ModuleError> {
-    let mut temp_netlist = match NamedTempFile::new() {
-      Ok(file) => file,
-      Err(err) => return Err(ModuleError::Netlist(err.to_string())),
-    };
+  pub fn new_from_str(raw_netlist: &str, top_module: &str) -> Result<Self> {
+    let mut temp_netlist = NamedTempFile::new()?;
 
     // TODO: Better error handling
-    let _ = temp_netlist.write(raw_netlist.as_bytes()).unwrap();
+    let _ = temp_netlist.write(raw_netlist.as_bytes())?;
 
     Self::new_from_path(temp_netlist.path().to_str().unwrap(), top_module)
   }
 
-  pub fn new_from_path(netlist_path: &str, top_module: &str) -> Result<Self, ModuleError> {
-    let temp_flattened = match NamedTempFile::new() {
-      Ok(file) => file,
-      Err(err) => return Err(ModuleError::Netlist(err.to_string())),
-    };
+  pub fn new_from_path(netlist_path: &str, top_module: &str) -> Result<Self> {
+    let temp_flattened = NamedTempFile::new()?;
+    let mut temp_torder = NamedTempFile::new()?;
 
-    let mut temp_torder = match NamedTempFile::new() {
-      Ok(file) => file,
-      Err(err) => return Err(ModuleError::Netlist(err.to_string())),
-    };
-
-    let yosys_output = Command::new("yosys")
+    _ = Command::new("yosys")
       .arg("-f")
       .arg("json")
       .arg(netlist_path)
@@ -106,21 +83,12 @@ impl HardwareModule {
         temp_flattened.path().display(),
         temp_torder.path().display()
       ))
-      .output();
+      .output()?;
 
-    if let Err(err) = yosys_output {
-      return Err(ModuleError::Netlist(err.to_string()));
-    }
-
-    let netlist = match yosys::Netlist::from_reader(temp_flattened) {
-      Ok(netlist) => Ok(netlist),
-      Err(err) => Err(ModuleError::Netlist(err.to_string())),
-    }?;
+    let netlist = yosys::Netlist::from_reader(temp_flattened)?;
 
     let mut topo_order = String::new();
-    if let Err(err) = temp_torder.read_to_string(&mut topo_order) {
-      return Err(ModuleError::Netlist(err.to_string()));
-    }
+    _ = temp_torder.read_to_string(&mut topo_order)?;
 
     let mut clean_topo_order = vec![];
 
@@ -135,18 +103,13 @@ impl HardwareModule {
     Self::new(netlist, &clean_topo_order, top_module)
   }
 
-  pub fn new(
-    netlist: yosys::Netlist,
-    topo_order: &[&str],
-    top_module: &str,
-  ) -> Result<Self, ModuleError> {
+  pub fn new(netlist: yosys::Netlist, topo_order: &[&str], top_module: &str) -> Result<Self> {
     // Design must be flattened
     let Some(synth_module) = netlist.modules.get(top_module) else {
-      return Err(CellError::Unsupported(top_module.to_string()).into());
+      return Err(CellError::Unsupported(top_module.to_string()))?;
     };
 
     let mut cells = vec![];
-    // let mut cell_map = CellMap::new();
     let mut cell_info: HashMap<String, String> = HashMap::new();
 
     for cell_name in topo_order.iter().rev() {
@@ -159,8 +122,6 @@ impl HardwareModule {
       let cell = create_cell(synth_cell)?;
 
       cells.push(cell);
-      // cell_map.insert(cell_name.to_string(), cells.len() - 1);
-      // cell_info.insert(cell_name.to_string(), synth_cell.clone());
       cell_info.insert(cell_name.to_string(), synth_cell.cell_type.to_string());
     }
 
@@ -186,7 +147,7 @@ impl HardwareModule {
 
     let mut ports = PortMap::new();
     for (name, port) in &synth_module.ports {
-      ports.insert(name.clone(), Port::new(port));
+      ports.insert(name.clone(), Port::new(port)?);
     }
     // Temp?
     for (name, netname) in &synth_module.netnames {
@@ -202,7 +163,7 @@ impl HardwareModule {
         signed: Default::default(),
       };
 
-      ports.insert(name.clone(), Port::new(&port));
+      ports.insert(name.clone(), Port::new(&port)?);
     }
 
     let mut signals = vec![Signal::default(); max_signal + 1];
@@ -221,46 +182,46 @@ impl HardwareModule {
     })
   }
 
-  pub fn get_signal_nets(&self, name: &str) -> Result<Box<[usize]>, ModuleError> {
+  pub fn get_signal_nets(&self, name: &str) -> Result<Box<[usize]>> {
     match self.signal_map.get(name) {
       Some(net) => Ok(net.clone()),
-      None => Err(ModuleError::MissingSignal(name.to_string())),
+      None => Err(ModuleError::MissingSignal(name.to_string()))?,
     }
   }
 
-  pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
+  pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<()> {
     let Some(signal) = self.signals.get_mut(net) else {
-      return Err(ModuleError::MissingNet(net));
+      return Err(ModuleError::MissingNet(net))?;
     };
     signal.set_constant(value);
     Ok(())
   }
 
-  pub fn unstick_signal(&mut self, net: usize) -> Result<(), ModuleError> {
+  pub fn unstick_signal(&mut self, net: usize) -> Result<()> {
     let Some(signal) = self.signals.get_mut(net) else {
-      return Err(ModuleError::MissingNet(net));
+      return Err(ModuleError::MissingNet(net))?;
     };
     signal.unset_constant();
     Ok(())
   }
 
-  pub fn set_clock(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
+  pub fn set_clock(&mut self, net: usize, polarity: Bit) -> Result<()> {
     match self.signals.get(net) {
       Some(_) => {
         self.clock_net = Some((net, polarity));
         Ok(())
       }
-      None => Err(ModuleError::MissingNet(net)),
+      None => Err(ModuleError::MissingNet(net))?,
     }
   }
 
-  pub fn set_reset(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
+  pub fn set_reset(&mut self, net: usize, polarity: Bit) -> Result<()> {
     match self.signals.get(net) {
       Some(_) => {
         self.reset_net = Some((net, polarity));
         Ok(())
       }
-      None => Err(ModuleError::MissingNet(net)),
+      None => Err(ModuleError::MissingNet(net))?,
     }
   }
 
@@ -291,9 +252,9 @@ impl HardwareModule {
     }
   }
 
-  pub fn eval_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
+  pub fn eval_clocked(&mut self, cycles: Option<u32>) -> Result<()> {
     let Some((clock_net, polarity)) = self.clock_net else {
-      return Err(ModuleError::MissingSignal("clock".to_string()));
+      return Err(ModuleError::MissingSignal("clock".to_string()))?;
     };
 
     let cycles = cycles.unwrap_or(1);
@@ -309,9 +270,9 @@ impl HardwareModule {
     Ok(())
   }
 
-  pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
+  pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> Result<()> {
     let Some((reset_net, polarity)) = self.reset_net else {
-      return Err(ModuleError::MissingSignal("reset".to_string()));
+      return Err(ModuleError::MissingSignal("reset".to_string()))?;
     };
 
     self.signals[reset_net].set_value(polarity);
@@ -329,68 +290,52 @@ impl HardwareModule {
     self.signals[1].set_constant(Bit::ONE);
   }
 
-  pub fn set_port_shape(&mut self, name: &str, shape: &[usize; 2]) -> Result<(), ModuleError> {
+  pub fn set_port_shape(&mut self, name: &str, shape: &[usize; 2]) -> Result<()> {
     match self.ports.get_mut(name) {
-      Some(port) => match port.set_shape(shape) {
-        Ok(()) => Ok(()),
-        Err(err) => Err(ModuleError::Port(name.to_string(), err)),
-      },
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      Some(port) => port.set_shape(shape),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 
-  pub fn get_port_shape(&self, name: &str) -> Result<[usize; 2], ModuleError> {
+  pub fn get_port_shape(&self, name: &str) -> Result<[usize; 2]> {
     match self.ports.get(name) {
       Some(port) => Ok(port.get_shape()),
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 
-  pub fn get_port_direction(&self, name: &str) -> Result<PortDirection, ModuleError> {
+  pub fn get_port_direction(&self, name: &str) -> Result<PortDirection> {
     match self.ports.get(name) {
       Some(port) => Ok(port.direction.clone()),
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 
-  pub fn get_port_bits(&self, name: &str) -> Result<BitVec, ModuleError> {
+  pub fn get_port_bits(&self, name: &str) -> Result<BitVec> {
     match self.ports.get(name) {
       Some(port) => Ok(port.get_bits(&self.signals)),
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 
-  pub fn set_port_bits(&mut self, name: &str, vals: &BitVec) -> Result<(), ModuleError> {
+  pub fn set_port_bits(&mut self, name: &str, vals: &BitVec) -> Result<()> {
     match self.ports.get_mut(name) {
-      Some(port) => match port.set_bits(vals, &mut self.signals) {
-        Ok(()) => Ok(()),
-        Err(err) => Err(ModuleError::Port(name.to_string(), err)),
-      },
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      Some(port) => port.set_bits(vals, &mut self.signals),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 
-  pub fn get_port_int<T: PrimInt + std::ops::BitXorAssign>(
-    &self,
-    name: &str,
-  ) -> Result<T, ModuleError> {
+  pub fn get_port_int<T: PrimInt + std::ops::BitXorAssign>(&self, name: &str) -> Result<T> {
     match self.ports.get(name) {
       Some(port) => Ok(port.get_int(&self.signals)),
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 
-  pub fn set_port_int<T: PrimInt + std::fmt::Display>(
-    &mut self,
-    name: &str,
-    val: T,
-  ) -> Result<(), ModuleError> {
+  pub fn set_port_int<T: PrimInt + std::fmt::Display>(&mut self, name: &str, val: T) -> Result<()> {
     match self.ports.get_mut(name) {
-      Some(port) => match port.set_int(val, &mut self.signals) {
-        Ok(()) => Ok(()),
-        Err(err) => Err(ModuleError::Port(name.to_string(), err)),
-      },
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      Some(port) => port.set_int(val, &mut self.signals),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 
@@ -404,17 +349,10 @@ impl HardwareModule {
     }
   }
 
-  pub fn set_port_int_vec<T: PrimInt>(
-    &mut self,
-    name: &str,
-    vals: &[T],
-  ) -> Result<(), ModuleError> {
+  pub fn set_port_int_vec<T: PrimInt>(&mut self, name: &str, vals: &[T]) -> Result<()> {
     match self.ports.get_mut(name) {
-      Some(port) => match port.set_int_vec(vals, &mut self.signals) {
-        Ok(()) => Ok(()),
-        Err(err) => Err(ModuleError::Port(name.to_string(), err)),
-      },
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      Some(port) => port.set_int_vec(vals, &mut self.signals),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 
@@ -432,13 +370,10 @@ impl HardwareModule {
     &mut self,
     name: &str,
     vals: ArrayView1<T>,
-  ) -> Result<(), ModuleError> {
+  ) -> Result<()> {
     match self.ports.get(name) {
-      Some(port) => match port.set_ndarray(vals, &mut self.signals) {
-        Ok(()) => Ok(()),
-        Err(err) => Err(ModuleError::Port(name.to_string(), err)),
-      },
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      Some(port) => port.set_ndarray(vals, &mut self.signals),
+      None => Err(ModuleError::MissingPort(name.to_string()))?,
     }
   }
 

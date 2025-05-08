@@ -18,7 +18,7 @@ use rstest::rstest;
   Bit::ZERO,
 ], "00100101")]
 fn test_bits_to_str(#[case] bits: Vec<Bit>, #[case] expected: String) {
-  let bits = BitVec { bits: bits };
+  let bits = BitVec { bits };
   assert_eq!(bits.to_string(), expected);
 }
 

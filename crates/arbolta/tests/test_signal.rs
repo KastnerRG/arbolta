@@ -40,8 +40,10 @@ fn test_signal_net_toggle_rising() {
 
 #[test]
 fn test_signal_net_toggle_falling() {
-  let mut x = Signal::default();
-  x.value = Bit::ONE;
+  let mut x = Signal {
+    value: Bit::ONE,
+    ..Default::default()
+  };
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);
@@ -71,8 +73,10 @@ fn test_signal_net_toggle_same_zero() {
 
 #[test]
 fn test_signal_net_toggle_same_one() {
-  let mut x = Signal::default();
-  x.value = Bit::ONE;
+  let mut x = Signal {
+    value: Bit::ONE,
+    ..Default::default()
+  };
 
   assert_eq!(x.get_total_toggle_count(), 0);
   assert_eq!(x.get_toggle_count_falling(), 0);

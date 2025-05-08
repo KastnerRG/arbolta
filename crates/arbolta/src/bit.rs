@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
+use anyhow::Result;
 use bincode::{Decode, Encode};
 use core::fmt;
 use ndarray::{Array1, ArrayView1, ArrayViewMut1};
@@ -228,7 +229,7 @@ impl BitVec {
   /// # Arguments
   /// * `val` - Int to convert.
   /// * `size` - Number of bits to use.
-  fn int_to_bits_sized<T: PrimInt>(val: T, size: usize) -> Result<Vec<Bit>, ParseBitError> {
+  fn int_to_bits_sized<T: PrimInt>(val: T, size: usize) -> Result<Vec<Bit>> {
     let mut bits: Vec<Bit> = vec![];
     for n in 0..size {
       bits.push(Bit::from_int((val >> n) & T::one())?);
@@ -296,7 +297,7 @@ impl BitVec {
   /// # Arguments
   /// * `val` - Int to convert.
   /// * `size` - Number of bits to use.
-  pub fn from_int_sized<T: PrimInt>(val: T, size: usize) -> Result<Self, ParseBitError> {
+  pub fn from_int_sized<T: PrimInt>(val: T, size: usize) -> Result<Self> {
     let bits = Self::int_to_bits_sized(val, size)?;
     Ok(Self::from(bits))
   }
@@ -305,7 +306,7 @@ impl BitVec {
   ///
   /// # Arguments
   /// * `val` - Int to convert.
-  pub fn from_int<T: PrimInt>(val: T) -> Result<Self, ParseBitError> {
+  pub fn from_int<T: PrimInt>(val: T) -> Result<Self> {
     let type_size = std::mem::size_of::<T>() * 8; // bytes to bits
     let bits = Self::int_to_bits_sized(val, type_size)?;
     Ok(Self::from(bits))
@@ -321,7 +322,7 @@ impl BitVec {
   /// # Arguments
   /// * `vals` - Ints to convert.
   /// * `elem_size` - Number of bits per int.
-  pub fn from_ints_sized<T: PrimInt>(vals: &[T], elem_size: usize) -> Result<Self, ParseBitError> {
+  pub fn from_ints_sized<T: PrimInt>(vals: &[T], elem_size: usize) -> Result<Self> {
     let mut bits: Vec<Bit> = vec![];
     for val in vals {
       bits.append(&mut Self::int_to_bits_sized(*val, elem_size)?);
@@ -334,7 +335,7 @@ impl BitVec {
   ///
   /// # Arguments
   /// * `vals` - Ints to convert.
-  pub fn from_ints<T: PrimInt>(vals: &[T]) -> Result<Self, ParseBitError> {
+  pub fn from_ints<T: PrimInt>(vals: &[T]) -> Result<Self> {
     let type_size = std::mem::size_of::<T>() * 8; // bytes to bits
     Self::from_ints_sized(vals, type_size)
   }
@@ -380,10 +381,7 @@ impl BitVec {
   /// # Arguments
   /// * `vals` - Ints to convert.
   /// * `elem_size` - Number of bits per int.
-  pub fn from_int_ndarray_sized<T: PrimInt>(
-    vals: ArrayView1<T>,
-    elem_size: usize,
-  ) -> Result<Self, ParseBitError> {
+  pub fn from_int_ndarray_sized<T: PrimInt>(vals: ArrayView1<T>, elem_size: usize) -> Result<Self> {
     let mut bits: Vec<Bit> = vec![];
     for val in vals {
       bits.append(&mut Self::int_to_bits_sized(*val, elem_size)?);
@@ -395,7 +393,7 @@ impl BitVec {
   ///
   /// # Arguments
   /// * `vals` - Ints to convert.
-  pub fn from_int_ndarray<T: PrimInt>(vals: ArrayView1<T>) -> Result<Self, ParseBitError> {
+  pub fn from_int_ndarray<T: PrimInt>(vals: ArrayView1<T>) -> Result<Self> {
     let type_size = std::mem::size_of::<T>() * 8; // bytes to bits
     Self::from_int_ndarray_sized(vals, type_size)
   }
@@ -404,9 +402,9 @@ impl BitVec {
   ///
   /// # Arguments
   /// * `vals` - Bools to convert.
-  pub fn from_bool_ndarray(vals: ArrayView1<bool>) -> Result<Self, ParseBitError> {
+  pub fn from_bool_ndarray(vals: ArrayView1<bool>) -> Result<Self> {
     match vals.as_slice() {
-      None => Err(ParseBitError),
+      None => Err(ParseBitError)?,
       Some(buffer_slice) => Ok(Self::from(buffer_slice)),
     }
   }
@@ -431,9 +429,9 @@ impl BitVec {
     &self,
     elem_size: usize,
     mut buffer: ArrayViewMut1<T>,
-  ) -> Result<(), ParseBitError> {
+  ) -> Result<()> {
     match buffer.as_slice_mut() {
-      None => Err(ParseBitError),
+      None => Err(ParseBitError)?,
       Some(buffer_slice) => {
         Self::bits_to_ints_buffer(&self.bits, elem_size, buffer_slice);
         Ok(())
@@ -448,10 +446,10 @@ impl BitVec {
   pub fn to_int_ndarray_buffer<T: PrimInt + std::ops::BitXorAssign>(
     &self,
     mut buffer: ArrayViewMut1<T>,
-  ) -> Result<(), ParseBitError> {
+  ) -> Result<()> {
     let type_size = std::mem::size_of::<T>() * 8; // bytes to bits
     match buffer.as_slice_mut() {
-      None => Err(ParseBitError),
+      None => Err(ParseBitError)?,
       Some(buffer_slice) => {
         Self::bits_to_ints_buffer(&self.bits, type_size, buffer_slice);
         Ok(())
@@ -469,12 +467,9 @@ impl BitVec {
   ///
   /// # Arguments
   /// * `buffer` - `ndarray` buffer to store bools.
-  pub fn to_bool_ndarray_buffer(
-    &self,
-    mut buffer: ArrayViewMut1<bool>,
-  ) -> Result<(), ParseBitError> {
+  pub fn to_bool_ndarray_buffer(&self, mut buffer: ArrayViewMut1<bool>) -> Result<()> {
     match buffer.as_slice_mut() {
-      None => Err(ParseBitError),
+      None => Err(ParseBitError)?,
       Some(buffer_slice) => {
         self
           .bits

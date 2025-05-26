@@ -4,18 +4,20 @@ import brevitas.nn as qnn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from brevitas.inject import ExtendedInjector
 from brevitas.quant.experimental.float_base import (
     FloatActBase,
-    FloatBase,
     FloatWeightBase,
 )
 from brevitas.quant.scaled_int import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
 from brevitas.quant_tensor.float_quant_tensor import FloatQuantTensor
 from brevitas.quant_tensor.int_quant_tensor import IntQuantTensor
 from torch import Tensor
+from .minifloat import mf_to_raw, fp_mixin_factory
 
-__all__ = ["IntQuantLinearModel", "FloatQuantLinearModel", "mf_to_raw", "raw_to_mf"]
+__all__ = [
+    "IntQuantLinearModel",
+    "FloatQuantLinearModel",
+]
 
 
 class QuantLinearModel(nn.Module, metaclass=ABCMeta):
@@ -70,83 +72,6 @@ class IntQuantLinearModel(QuantLinearModel):
         return inputs.int(), inputs.scale
 
 
-# Helper for converting quantized floats to raw binary
-def mf_to_raw(
-    x: Tensor,
-    exponent_bit_width: int,
-    mantissa_bit_width: int,
-    exponent_bias: int,
-    eps: float,
-) -> Tensor:
-    emin = -exponent_bias + 1
-
-    sign = torch.signbit(x).type(torch.int)
-    exp = torch.floor(torch.log2(torch.abs(x) + eps)).type(torch.int)
-    exp = torch.clamp_min(exp, emin)
-    man = torch.abs(x) / torch.exp2(exp)
-
-    exp_bits = exp - (man < 1).type(torch.int) + exponent_bias  # Denorm
-    man_bits = (man * (1 << mantissa_bit_width)).type(torch.int)
-    man_bits = man_bits & ((1 << mantissa_bit_width) - 1)
-
-    return (
-        (sign << (exponent_bit_width + mantissa_bit_width))
-        | (exp_bits << mantissa_bit_width)
-        | man_bits
-    )
-
-
-# Helper for converting raw binary minifloats to floats
-def raw_to_mf(
-    x: Tensor,
-    exponent_bit_width: int,
-    mantissa_bit_width: int,
-    exponent_bias: int,
-) -> Tensor:
-    emin = -exponent_bias + 1
-
-    sign_mask = 1 << (exponent_bit_width + mantissa_bit_width)
-    exp_mask = ((1 << exponent_bit_width) - 1) << mantissa_bit_width
-    man_mask = (1 << mantissa_bit_width) - 1
-
-    sign = torch.where((x & sign_mask) == 0, 1.0, -1.0)
-    exp_denorm = ((x & exp_mask) >> mantissa_bit_width).type(torch.float)
-    man_denorm = (x & man_mask).type(torch.float) / (2**mantissa_bit_width)
-
-    exp = torch.where(exp_denorm == 0, emin, exp_denorm - exponent_bias)
-    man = torch.where(exp_denorm == 0, man_denorm, 1.0 + man_denorm)
-
-    return sign * man * torch.exp2(exp)
-
-
-# Helper for creating custom minifloat quantizers
-def fp_mixin_factory(
-    exponent_bit_width: int, mantissa_bit_width: int, base_class: FloatBase
-):
-    bit_width = 1 + exponent_bit_width + mantissa_bit_width
-    name = f"Fp{bit_width}e{exponent_bit_width}m{mantissa_bit_width}"
-    mixin = type(
-        name + "Mixin",
-        (ExtendedInjector,),
-        {
-            # Add sign bit
-            "bit_width": bit_width,
-            "exponent_bit_width": exponent_bit_width,
-            "mantissa_bit_width": mantissa_bit_width,
-            "saturating": True,
-        },
-    )
-
-    if base_class is FloatActBase:
-        class_name = name + "Act"
-    elif base_class is FloatWeightBase:
-        class_name = name + "Weight"
-    else:
-        raise TypeError("Unsupported Float Base")
-
-    return type(class_name, (mixin, base_class), {})
-
-
 class FloatQuantLinearModel(QuantLinearModel):
     def __init__(
         self,
@@ -166,30 +91,36 @@ class FloatQuantLinearModel(QuantLinearModel):
             weight_quant=weight_quant,
         )
 
-    def quant_weight(self) -> tuple[Tensor, Tensor]:
+    def quant_weight(self, return_raw: bool = False) -> tuple[Tensor, Tensor]:
         with torch.no_grad():
             weights: FloatQuantTensor = self.fc1.quant_weight()
 
-        raw_weights = mf_to_raw(
-            weights.minifloat(),
-            weights.exponent_bit_width.int(),
-            weights.mantissa_bit_width.int(),
-            weights.exponent_bias.int(),
-            weights.eps,
-        ).type(torch.uint8)
+        out = weights.minifloat()
 
-        return raw_weights, weights.scale
+        if return_raw:
+            out = mf_to_raw(
+                out,
+                weights.exponent_bit_width.int(),
+                weights.mantissa_bit_width.int(),
+                weights.exponent_bias.int(),
+                weights.eps,
+            ).type(torch.uint8)
 
-    def quant_input(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        return out, weights.scale
+
+    def quant_input(self, x: Tensor, return_raw: bool = False) -> tuple[Tensor, Tensor]:
         with torch.no_grad():
             inputs: FloatQuantTensor = self.fc1.input_quant(x)
 
-        raw_inputs = mf_to_raw(
-            inputs.minifloat(),
-            inputs.exponent_bit_width.int(),
-            inputs.mantissa_bit_width.int(),
-            inputs.exponent_bias.int(),
-            inputs.eps,
-        ).type(torch.uint8)
+        out = inputs.minifloat()
 
-        return raw_inputs, inputs.scale
+        if return_raw:
+            out = mf_to_raw(
+                out,
+                inputs.exponent_bit_width.int(),
+                inputs.mantissa_bit_width.int(),
+                inputs.exponent_bias.int(),
+                inputs.eps,
+            ).type(torch.uint8)
+
+        return out, inputs.scale

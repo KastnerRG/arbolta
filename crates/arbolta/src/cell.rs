@@ -673,7 +673,11 @@ impl CellFn for Sub {
     let y = if self.signed {
       BitVec::from_int_sized(a.to_int::<i64>() - b.to_int::<i64>(), self.y_nets.len()).unwrap()
     } else {
-      BitVec::from_int_sized(a.to_int::<u64>() - b.to_int::<u64>(), self.y_nets.len()).unwrap()
+      BitVec::from_int_sized(
+        a.to_int::<u64>().wrapping_sub(b.to_int::<u64>()),
+        self.y_nets.len(),
+      )
+      .unwrap()
     };
 
     self
@@ -781,10 +785,12 @@ impl CellFn for Neg {
     );
 
     // Hard code as i64 add, fix later
+    // let y = BitVec::from_int_sized(-a.to_int::<i64>(), self.y_nets.len()).unwrap();
+
     let y = if self.signed {
       BitVec::from_int_sized(-a.to_int::<i64>(), self.y_nets.len()).unwrap()
     } else {
-      BitVec::from_int_sized(!(a.to_int::<u64>()) + 1, self.y_nets.len()).unwrap()
+      BitVec::from_int_sized((!a.to_int::<u64>()).wrapping_add(1), self.y_nets.len()).unwrap()
     };
 
     self

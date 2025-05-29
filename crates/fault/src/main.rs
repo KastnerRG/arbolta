@@ -3,11 +3,10 @@ use arbolta::bit::Bit;
 use arbolta::hardware_module::HardwareModule;
 use clap::Parser;
 use fault::utils::worker;
-use indicatif::{ParallelProgressIterator, ProgressIterator};
+use indicatif::ParallelProgressIterator;
 use ndarray::parallel::prelude::*;
-use ndarray::{Array1, Array2, Array3, Axis};
+use ndarray::{Array2, Array3};
 use ndarray_npy::read_npy;
-use ndarray_stats::QuantileExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -74,7 +73,7 @@ fn main() -> Result<()> {
     .collect();
 
   // Start simulation
-  nets.into_par_iter().for_each(|n| {
+  nets.into_par_iter().progress().for_each(|n| {
     for stuck_val in [Bit::ZERO, Bit::ONE] {
       let thread_idx = rayon::current_thread_index().unwrap();
       let design = &mut designs[thread_idx].lock().unwrap();

@@ -2,7 +2,7 @@ use anyhow::{Context, Ok, Result};
 use arbolta::bit::Bit;
 use arbolta::hardware_module::HardwareModule;
 use clap::Parser;
-use fault::utils::run_sa;
+use fault::utils::worker;
 use indicatif::{ParallelProgressIterator, ProgressIterator};
 use ndarray::parallel::prelude::*;
 use ndarray::{Array1, Array2, Array3, Axis};
@@ -26,8 +26,11 @@ struct Args {
   #[clap(long)]
   weights: PathBuf,
   /// Path to NumPy targets file.
+  // #[clap(long)]
+  // targets: PathBuf,
+  /// Path to list of nets for fault injection campaign.
   #[clap(long)]
-  targets: PathBuf,
+  nets: PathBuf,
   #[clap(long)]
   rows: usize,
   #[clap(long)]
@@ -51,8 +54,13 @@ fn main() -> Result<()> {
     .with_context(|| format!("Failed to read NumPy array from {:?}", flags.inputs))?; // (N, 28, 28)
   let weights: Array2<u8> = read_npy(&flags.weights)
     .with_context(|| format!("Failed to read NumPy array from {:?}", flags.weights))?; // (10, 784)
-  let targets: Array2<u8> = read_npy(&flags.targets)
-    .with_context(|| format!("Failed to read NumPy array from {:?}", flags.targets))?;
+  // let targets: Array2<u8> = read_npy(&flags.targets)
+  //   .with_context(|| format!("Failed to read NumPy array from {:?}", flags.targets))?;
+
+  let nets: Vec<usize> = std::fs::read_to_string(&flags.nets)?
+    .split_whitespace()
+    .map(|x| x.parse().unwrap())
+    .collect();
 
   // Setup designs
   design.set_clock(2, Bit::ONE)?;
@@ -61,52 +69,18 @@ fn main() -> Result<()> {
   design.set_port_shape("sk_data_i", &[flags.cols, flags.sk_size])?;
   design.set_port_shape("m_data_o", &[1, flags.m_size])?;
 
-  // let mut sa = SystolicArray::new(design);
-
-  // let preds: Vec<u8> = inputs
-  //   .axis_iter(Axis(0))
-  //   // .progress()
-  //   .map(|image| {
-  //     let x = image.to_shape((1, flags.iterations)).unwrap();
-  //     let mut logits = Array2::<i32>::zeros((10, 1));
-  //     sa.run_matmul(&x.t().view(), &weights.t().view(), &mut logits)
-  //       .unwrap();
-
-  //     logits.flatten().argmax().unwrap() as u8
-  //   })
-  //   .collect();
-
-  // let image = inputs.index_axis(Axis(0), 0);
-  // let image = image.to_shape((1, flags.iterations)).unwrap();
-  // let mut logits = Array2::<i32>::zeros((10, 1));
-  // sa.run_matmul(&image.t().view(), &weights.t().view(), &mut logits)?;
-  // println!("{logits}");
-
   let designs: Vec<Mutex<HardwareModule>> = (0..rayon::current_num_threads())
     .map(|_| Mutex::new(design.clone()))
     .collect();
 
   // Start simulation
-  let preds: Vec<u8> = inputs
-    .axis_iter(Axis(0))
-    .into_par_iter()
-    // .progress()
-    .map(|image| {
-      let x = image.to_shape((1, flags.iterations)).unwrap();
-      let mut logits = Array2::<i32>::zeros((10, 1));
-
+  nets.into_par_iter().for_each(|n| {
+    for stuck_val in [Bit::ZERO, Bit::ONE] {
       let thread_idx = rayon::current_thread_index().unwrap();
-      // let thread_idx = 0;
       let design = &mut designs[thread_idx].lock().unwrap();
-      run_sa(design, &x.t().view(), &weights.t().view(), &mut logits).unwrap();
-
-      logits.flatten().argmax().unwrap() as u8
-    })
-    .collect();
-
-  let preds: Array1<u8> = preds.into();
-  let temp: Array1<u8> = targets.into_flat();
-  assert_eq!(preds, temp);
+      worker(design, &inputs.view(), &weights.view(), n, stuck_val).unwrap();
+    }
+  });
 
   Ok(())
 }

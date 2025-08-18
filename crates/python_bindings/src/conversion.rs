@@ -2,39 +2,40 @@
 // SPDX-License-Identifier: MIT
 
 use arbol::bit::BitVec;
-use num_traits::PrimInt;
-use numpy::{PyReadonlyArray1, PyReadwriteArray1};
-use pyo3::exceptions::PyValueError;
+use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingSub};
+use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 
 pub fn bits_to_bool_numpy(bits: &BitVec, numpy_array: &Bound<'_, PyAny>) -> PyResult<()> {
   let mut buffer = numpy_array.extract::<PyReadwriteArray1<bool>>()?;
-  match bits.to_bool_ndarray_buffer(buffer.as_array_mut()) {
-    Ok(()) => Ok(()),
-    Err(err) => Err(PyValueError::new_err(format!("{err}"))),
-  }
+
+  bits
+    .bits
+    .iter()
+    .zip(buffer.as_array_mut().iter_mut())
+    .for_each(|(&bit, buf)| *buf = bit.0);
+
+  Ok(())
 }
 
 pub fn bool_numpy_to_bits(numpy_array: &Bound<'_, PyAny>) -> PyResult<BitVec> {
   let buffer = numpy_array.extract::<PyReadonlyArray1<bool>>()?;
-
-  match BitVec::from_bool_ndarray(buffer.as_array()) {
-    Ok(bits) => Ok(bits),
-    Err(err) => Err(PyValueError::new_err(format!("{err}"))),
-  }
+  Ok(BitVec::from_bools(buffer.to_owned_array()))
 }
 
-pub fn bits_to_int_numpy<T: PrimInt + std::ops::BitXorAssign + numpy::Element>(
+pub fn bits_to_int_numpy<T: PrimInt + WrappingAdd + WrappingShl + WrappingSub + numpy::Element>(
   bits: &BitVec,
   elem_size: usize,
   numpy_array: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
   let mut buffer = numpy_array.extract::<PyReadwriteArray1<T>>()?;
 
-  match bits.to_int_ndarray_sized_buffer(elem_size, buffer.as_array_mut()) {
-    Ok(()) => Ok(()),
-    Err(err) => Err(PyValueError::new_err(format!("{err}"))),
-  }
+  bits
+    .to_ints(Some(elem_size))
+    .zip(buffer.as_array_mut().iter_mut())
+    .for_each(|(src, dst)| *dst = src);
+
+  Ok(())
 }
 
 pub fn int_numpy_to_bits<T: PrimInt + numpy::Element>(
@@ -42,9 +43,5 @@ pub fn int_numpy_to_bits<T: PrimInt + numpy::Element>(
   elem_size: usize,
 ) -> PyResult<BitVec> {
   let buffer = numpy_array.extract::<PyReadonlyArray1<T>>()?;
-
-  match BitVec::from_int_ndarray_sized(buffer.as_array(), elem_size) {
-    Ok(bits) => Ok(bits),
-    Err(err) => Err(PyValueError::new_err(format!("{err}"))),
-  }
+  Ok(BitVec::from_ints(buffer.to_owned_array(), Some(elem_size)))
 }

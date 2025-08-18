@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 from .arbolta import Design
 
-__all__ = ["PortConfig", "DesignConfig", "HardwareDesign", "save", "load"]
+__all__ = ["PortConfig", "HardwareDesign", "save", "load"]
 
 
 @dataclass
@@ -20,7 +20,7 @@ class PortConfig:
     ----------
     shape : tuple
         Interpret port bits with shape.
-    dtype : np.dtype
+    dtype : np.dtype | type
         Interpret port bits as type.
     clock : bool, optional
         Port is a clock signal.
@@ -31,26 +31,10 @@ class PortConfig:
     """
 
     shape: Tuple[int, int] = (1, 1)
-    dtype: np.dtype = np.uint32
+    dtype: Union[np.dtype, type] = np.uint32
     clock: bool = False
     reset: bool = False
-    polarity: int = 1
-
-
-class DesignConfig(TypedDict):
-    """
-    Configuration for HardwareDesign.
-
-    Attributes
-    ----------
-    port : str
-        Name of port.
-    config : PortConfig
-        Configuration for port
-    """
-
-    port: str
-    config: PortConfig
+    polarity: Optional[int] = None
 
 
 @dataclass
@@ -60,7 +44,7 @@ class Port:
 
 
 class HardwarePorts:
-    def __init__(self, config: DesignConfig, design: Design):
+    def __init__(self, config: dict[str, PortConfig], design: Design):
         _ports: Dict[str, Port] = {}
 
         port_name: str
@@ -70,7 +54,7 @@ class HardwarePorts:
                 raise AttributeError(f"Port `{port_name}` cannot be a reset and clock")
             if port_config.reset:
                 design.set_reset(port_name, bool(port_config.polarity))
-            if port_config.clock:
+            elif port_config.clock:
                 design.set_clock(port_name, bool(port_config.polarity))
 
             design.set_port_shape(port_name, port_config.shape)
@@ -113,7 +97,14 @@ class HardwarePorts:
 
 
 class HardwareDesign:
-    def __init__(self, top_module: str, netlist_path: str, config: DesignConfig):
+    def __init__(
+        self,
+        top_module: str,
+        netlist_path: str,
+        config: dict[str, PortConfig],
+        yosys_path: str = "yosys",
+        yosys_server_path="yosys_server",
+    ):
         """
         Parameters
         ----------
@@ -121,11 +112,11 @@ class HardwareDesign:
             Name of top module.
         netlist_path : str
             Path to Yosys netlist JSON.
-        config : DesignConfig
-            Configuration for design.
+        config : dict[str, PortConfig]
+            Configuration for design ports.
         """
         self.top_module = top_module
-        self.design = Design(top_module, netlist_path)
+        self.design = Design(top_module, netlist_path, yosys_path, yosys_server_path)
         self.ports = HardwarePorts(config, self.design)
 
     def reset(self):

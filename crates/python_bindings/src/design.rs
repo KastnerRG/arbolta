@@ -4,15 +4,17 @@
 use crate::conversion::{
   bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits,
 };
-
 use arbol::hardware_module::HardwareModule;
 use arbol::port::PortDirection;
+use arbol::yosys::YosysClient;
 use bincode::{Decode, Encode};
 use pyo3::exceptions::{PyAttributeError, PyException, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use yosys_netlist_json as yosys_json;
 
 #[pyclass(dict, module = "arbolta", name = "Design")]
 #[derive(Deserialize, Serialize, Decode, Encode)]
@@ -26,11 +28,30 @@ pub struct PyDesign {
 #[pymethods]
 impl PyDesign {
   #[new]
-  fn __new__(top_module: &str, netlist_path: &str) -> PyResult<Self> {
-    let module = match HardwareModule::new_from_path(netlist_path, top_module) {
-      Ok(module) => module,
-      Err(err) => return Err(PyException::new_err(format!("{err}"))),
+  #[pyo3(signature = (top_module, netlist_path, yosys_path="yosys", yosys_server_path="yosys_server"))]
+  fn __new__(
+    top_module: &str,
+    netlist_path: &str,
+    yosys_path: &str,
+    yosys_server_path: &str,
+  ) -> PyResult<Self> {
+    let client = YosysClient {
+      yosys_server_path: PathBuf::from(yosys_server_path),
+      yosys_path: PathBuf::from(yosys_path),
+      ..Default::default()
     };
+
+    let raw_netlist = std::fs::read(netlist_path)?;
+    let netlist = yosys_json::Netlist::from_slice(&raw_netlist)
+      .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let (netlist, torder) = rt
+      .block_on(client.flatten_netlist(top_module, netlist))
+      .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+
+    let module = HardwareModule::new(&netlist, &torder, top_module)
+      .map_err(|e| PyValueError::new_err(format!("{e}")))?;
 
     Ok(Self {
       top_module: top_module.to_string(),
@@ -102,7 +123,7 @@ impl PyDesign {
   }
 
   fn get_module_names(&self) -> Vec<String> {
-    todo!()
+    self.module.submodules.keys().cloned().collect()
   }
 
   fn get_signal_map(&self) -> HashMap<String, Vec<usize>> {
@@ -207,13 +228,6 @@ impl PyDesign {
     todo!()
   }
 
-  fn get_port_string(&self, name: &str) -> PyResult<String> {
-    match self.module.get_port_string(name) {
-      Ok(bit_string) => Ok(bit_string),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
-  }
-
   fn is_port_input(&self, name: &str) -> PyResult<bool> {
     let direction = match self.module.get_port_direction(name) {
       Ok(direction) => direction,
@@ -225,12 +239,13 @@ impl PyDesign {
 
   fn get_port_numpy(&self, name: &str, numpy_array: &Bound<'_, PyAny>) -> PyResult<()> {
     let item_type = numpy_array.getattr("dtype")?.getattr("str")?.to_string();
-    let shape = self.get_port_shape(name)?;
-    let elem_size = shape[1];
-    let bits = match self.module.get_port_bits(name) {
-      Ok(bits) => bits,
-      Err(err) => return Err(PyAttributeError::new_err(format!("{err}"))),
-    };
+    let elem_size = self.get_port_shape(name)?[1];
+
+    let bits = self
+      .module
+      .get_port(name)
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
+
     match item_type.as_str() {
       "|b1" => bits_to_bool_numpy(&bits, numpy_array),
       "|u1" | "<V1" => bits_to_int_numpy::<u8>(&bits, elem_size, numpy_array),
@@ -290,9 +305,10 @@ impl PyDesign {
         )));
       }
     };
-    match self.module.set_port_bits(name, &bits) {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
+
+    self
+      .module
+      .set_port(name, bits)
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))
   }
 }

@@ -3,6 +3,6 @@
 
 # type: ignore
 from .arbolta import Design  # For pickling
-from .design import DesignConfig, HardwareDesign, PortConfig, load, save
+from .design import HardwareDesign, PortConfig, load, save
 
-__all__ = ["Design", "PortConfig", "DesignConfig", "HardwareDesign", "save", "load"]
+__all__ = ["Design", "PortConfig", "HardwareDesign", "save", "load"]

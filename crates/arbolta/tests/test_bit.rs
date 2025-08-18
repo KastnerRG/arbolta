@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 use arbolta::bit::Bit;
-use std::str::FromStr;
-
 use rstest::rstest;
 
 #[rstest]
-#[case("0", Bit::ZERO)]
-#[case("1", Bit::ONE)]
-fn test_bit_from_str(#[case] val: String, #[case] expected: Bit) {
-  assert_eq!(Bit::from_str(&val).unwrap(), expected);
+#[case('0', Bit::ZERO)]
+#[case('1', Bit::ONE)]
+fn test_bit_from_char(#[case] val: char, #[case] expected: Bit) {
+  assert_eq!(Bit::try_from(val).unwrap(), expected);
 }
 
 #[rstest]
@@ -32,13 +30,6 @@ fn test_bit_from_bool(#[case] val: bool, #[case] expected: Bit) {
 #[case(Bit::ONE, true)]
 fn test_bit_to_bool(#[case] bit: Bit, #[case] expected: bool) {
   assert_eq!(bit.0, expected);
-}
-
-#[rstest]
-#[case(0, Bit::ZERO)]
-#[case(1, Bit::ONE)]
-fn test_bit_from_int(#[case] val: usize, #[case] expected: Bit) {
-  assert_eq!(Bit::from_int(val).unwrap(), expected);
 }
 
 #[test]

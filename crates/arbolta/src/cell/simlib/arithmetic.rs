@@ -1,77 +1,52 @@
-use super::CellFn;
-use crate::{
-  bit::{Bit, BitVec},
-  signal::Signals,
-};
+use super::*;
+use crate::{bit::BitVec, signal::Signals};
 use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
-
-macro_rules! define_arithmetic_cell {
-  ($name:ident, $op:tt) => {
-    #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
-    pub struct $name {
-      signed: bool,
-      a_nets: Box<[usize]>,
-      b_nets: Box<[usize]>,
-      y_nets: Box<[usize]>,
-    }
-
-    impl CellFn for $name {
-      #[inline]
-      fn eval(&mut self, signals: &mut Signals) {
-        let (a, b) = (
-          BitVec::from(
-            self
-              .a_nets
-              .iter()
-              .map(|n| signals.get_net(*n))
-              .collect::<Vec<Bit>>(),
-          ),
-          BitVec::from(
-            self
-              .b_nets
-              .iter()
-              .map(|n| signals.get_net(*n))
-              .collect::<Vec<Bit>>(),
-          ),
-        );
-        let output_size = self.y_nets.len();
-
-        let y: BitVec = if self.signed {
-          if output_size <= 64 {
-            let (a, b) = (a.to_int::<i64>(), b.to_int::<i64>());
-            BitVec::from_int(a $op b, Some(output_size))
-          } else {
-            let (a, b) = (a.to_int::<i128>(), b.to_int::<i128>());
-            BitVec::from_int(a $op b, Some(output_size))
-          }
-        } else {
-          if output_size <= 64 {
-            let (a, b) = (a.to_int::<u64>(), b.to_int::<u64>());
-            BitVec::from_int(a $op b, Some(output_size))
-          } else {
-            let (a, b) = (a.to_int::<u128>(), b.to_int::<u128>());
-            BitVec::from_int(a $op b, Some(output_size))
-          }
-        };
-
-        self
-          .y_nets
-          .iter()
-          .zip(y.into_iter())
-          .for_each(|(n, bit)| signals.set_net(*n, bit));
-      }
-
-      fn reset(&mut self) {}
-    }
-  };
-}
 
 define_arithmetic_cell!(Add, +);
 define_arithmetic_cell!(Sub, -);
 define_arithmetic_cell!(Mul, *);
 define_arithmetic_cell!(Div, /);
+define_arithmetic_cell!(Modulus, %);
+define_arithmetic_cell!(Le, <);
+define_arithmetic_cell!(Gt, >);
+define_arithmetic_cell!(Ge, >=);
+
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+pub struct Neg {
+  signed: bool,
+  a_nets: Box<[usize]>,
+  y_nets: Box<[usize]>,
+}
+
+impl CellFn for Neg {
+  #[inline]
+  fn eval(&mut self, signals: &mut Signals) {
+    let a = BitVec::from(bits_from_nets(signals, &self.a_nets));
+    let output_size = self.y_nets.len();
+
+    let y: BitVec = if output_size <= 64 {
+      let a = -a.to_int::<i64>();
+      if self.signed {
+        BitVec::from_int(a, Some(output_size))
+      } else {
+        BitVec::from_int(a as u64, Some(output_size))
+      }
+    } else {
+      let a = -a.to_int::<i128>();
+      if self.signed {
+        BitVec::from_int(a, Some(output_size))
+      } else {
+        BitVec::from_int(a as u128, Some(output_size))
+      }
+    };
+
+    copy_bits(signals, &self.y_nets, y);
+  }
+
+  fn reset(&mut self) {}
+}
 
 #[cfg(test)]
 mod tests {
@@ -131,5 +106,39 @@ mod tests {
   #[rstest]
   fn div() {
     println!("TODO")
+  }
+
+  #[rstest]
+  fn modulus() {
+    println!("TODO")
+  }
+
+  #[rstest]
+  // 37738 < 4365 = 0
+  #[case::unsigned_normal(false, "1001001101101010", "0001000100001101", "0")]
+  #[case::signed_normal(true, "1001001101101010", "0001000100001101", "1")]
+  fn le(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
+    run_binary_cell_case!(Le, signed, a, b, expected);
+  }
+
+  #[rstest]
+  fn ge() {
+    println!("TODO")
+  }
+
+  #[rstest]
+  fn gt() {
+    println!("TODO")
+  }
+
+  #[rstest]
+  // -37738 = 27798
+  #[case::unsigned_normal(false, "1001001101101010", "0110110010010110")]
+  // -37738 = -37738
+  #[case::signed_normal(true, "001001001101101010", "11110110110010010110")]
+  // -(-27798) = 27798
+  #[case::signed_normal(true, "1001001101101010", "0110110010010110")]
+  fn neg(#[case] signed: bool, #[case] a: BitVec, #[case] expected: BitVec) {
+    run_unary_cell_case_signed!(Neg, signed, a, expected);
   }
 }

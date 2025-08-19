@@ -1,5 +1,9 @@
-use super::{CellFn, bits_from_nets, copy_nets};
-use crate::{bit::Bit, signal::Signals};
+use super::{CellFn, bits_from_nets_pad, copy_bits, copy_nets};
+use crate::{
+  bit::{Bit, BitVec},
+  cell::simlib::bits_from_nets,
+  signal::Signals,
+};
 use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
@@ -14,23 +18,9 @@ pub struct Pos {
 impl CellFn for Pos {
   #[inline]
   fn eval(&mut self, signals: &mut Signals) {
-    let mut a = bits_from_nets(signals, &self.a_nets);
-
-    // Have to pad
-    if a.len() < self.y_nets.len() {
-      // Signed and sign-bit set
-      let sign_bit_set = a.last().is_some_and(|&b| b.into());
-      let pad_bit: Bit = (self.signed && sign_bit_set).into();
-
-      let pad_size = self.y_nets.len() - a.len();
-      a.extend(std::iter::repeat_n(pad_bit, pad_size));
-    }
-
-    self
-      .y_nets
-      .iter()
-      .zip(a.iter())
-      .for_each(|(n, b)| signals.set_net(*n, *b));
+    // Passthrough with padding
+    let a = bits_from_nets_pad(self.signed, signals, &self.a_nets, self.y_nets.len());
+    copy_bits(signals, &self.y_nets, a);
   }
 
   fn reset(&mut self) {}
@@ -55,6 +45,29 @@ impl CellFn for Mux {
   fn reset(&mut self) {}
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+pub struct BMux {
+  select_nets: Box<[usize]>,
+  a_nets: Box<[usize]>,
+  y_nets: Box<[usize]>,
+}
+
+impl CellFn for BMux {
+  #[inline]
+  fn eval(&mut self, signals: &mut Signals) {
+    let select = BitVec::from(bits_from_nets(signals, &self.select_nets));
+    let start_net: usize = select.to_int::<usize>() * self.y_nets.len();
+    let end_net = start_net + self.y_nets.len();
+
+    let a = bits_from_nets(signals, &self.a_nets);
+    (start_net..end_net)
+      .zip(a)
+      .for_each(|(n, b)| signals.set_net(n, b));
+  }
+
+  fn reset(&mut self) {}
+}
+
 #[cfg(test)]
 mod tests {
   use rstest::rstest;
@@ -66,6 +79,10 @@ mod tests {
 
   #[rstest]
   fn mux() {
+    println!("TODO");
+  }
+  #[rstest]
+  fn bmux() {
     println!("TODO");
   }
 }

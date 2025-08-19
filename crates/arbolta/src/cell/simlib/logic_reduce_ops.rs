@@ -13,6 +13,24 @@ macro_rules! reduce_nets {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+pub struct ReduceAnd {
+  a_nets: Box<[usize]>,
+  y_nets: Box<[usize]>,
+}
+
+impl CellFn for ReduceAnd {
+  #[inline]
+  fn eval(&mut self, signals: &mut Signals) {
+    signals.set_net(
+      self.y_nets[0],
+      reduce_nets!(signals, self.a_nets, Bit::ZERO, &),
+    );
+  }
+
+  fn reset(&mut self) {}
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
 pub struct ReduceOr {
   a_nets: Box<[usize]>,
   y_nets: Box<[usize]>,
@@ -21,8 +39,10 @@ pub struct ReduceOr {
 impl CellFn for ReduceOr {
   #[inline]
   fn eval(&mut self, signals: &mut Signals) {
-    let a: Bit = reduce_nets!(signals, self.a_nets, Bit::ZERO, |);
-    signals.set_net(self.y_nets[0], a);
+    signals.set_net(
+      self.y_nets[0],
+      reduce_nets!(signals, self.a_nets, Bit::ZERO, |),
+    );
   }
 
   fn reset(&mut self) {}
@@ -96,6 +116,11 @@ mod tests {
   #[case("1010100", "01")]
   fn reduce_or(#[case] a: BitVec, #[case] expected: BitVec) {
     run_unary_cell_case!(ReduceOr, a, expected);
+  }
+
+  #[rstest]
+  fn reduce_and() {
+    println!("TODO")
   }
 
   #[rstest]

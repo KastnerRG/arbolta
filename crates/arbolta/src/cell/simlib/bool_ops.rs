@@ -1,8 +1,5 @@
-use super::{CellFn, bits_from_nets};
-use crate::{
-  bit::{Bit, BitVec},
-  signal::Signals,
-};
+use super::*;
+use crate::{bit::BitVec, signal::Signals};
 use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
@@ -17,82 +14,21 @@ pub struct Not {
 impl CellFn for Not {
   #[inline]
   fn eval(&mut self, signals: &mut Signals) {
-    let mut a = bits_from_nets(signals, &self.a_nets);
-
-    // Have to pad
-    if a.len() < self.y_nets.len() {
-      // Signed and sign-bit set
-      let sign_bit_set = a.last().is_some_and(|&b| b.into());
-      let pad_bit: Bit = (self.signed && sign_bit_set).into();
-
-      let pad_size = self.y_nets.len() - a.len();
-      a.extend(std::iter::repeat_n(pad_bit, pad_size));
-    }
+    let a = bits_from_nets_pad(self.signed, signals, &self.a_nets, self.y_nets.len());
 
     self
       .y_nets
       .iter()
-      .zip(a.iter())
-      .for_each(|(n, b)| signals.set_net(*n, !*b));
+      .zip(a)
+      .for_each(|(&n, b)| signals.set_net(n, !b));
   }
 
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
-pub struct ProcAnd {
-  signed: bool,
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
-}
-
-impl CellFn for ProcAnd {
-  #[inline]
-  fn eval(&mut self, signals: &mut Signals) {
-    let (a, b) = (
-      BitVec::from(
-        self
-          .a_nets
-          .iter()
-          .map(|n| signals.get_net(*n))
-          .collect::<Vec<Bit>>(),
-      ),
-      BitVec::from(
-        self
-          .b_nets
-          .iter()
-          .map(|n| signals.get_net(*n))
-          .collect::<Vec<Bit>>(),
-      ),
-    );
-
-    let output_size = self.y_nets.len();
-    let y: BitVec = if self.signed {
-      if output_size <= 64 {
-        let (a, b) = (a.to_int::<i64>(), b.to_int::<i64>());
-        BitVec::from_int(a & b, Some(output_size))
-      } else {
-        let (a, b) = (a.to_int::<i128>(), b.to_int::<i128>());
-        BitVec::from_int(a & b, Some(output_size))
-      }
-    } else if output_size <= 64 {
-      let (a, b) = (a.to_int::<u64>(), b.to_int::<u64>());
-      BitVec::from_int(a & b, Some(output_size))
-    } else {
-      let (a, b) = (a.to_int::<u128>(), b.to_int::<u128>());
-      BitVec::from_int(a & b, Some(output_size))
-    };
-
-    self
-      .y_nets
-      .iter()
-      .zip(y)
-      .for_each(|(&n, bit)| signals.set_net(n, bit));
-  }
-
-  fn reset(&mut self) {}
-}
+define_arithmetic_cell!(ProcAnd, &);
+define_arithmetic_cell!(ProcOr, |);
+define_arithmetic_cell!(ProcXor, ^);
 
 #[cfg(test)]
 mod tests {
@@ -125,7 +61,18 @@ mod tests {
 
   #[rstest]
   #[case(false, "1111", "1111", "1111")]
+  #[case(false, "0000", "1111", "0000")]
   fn and(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
     run_binary_cell_case!(ProcAnd, signed, a, b, expected);
+  }
+
+  #[rstest]
+  fn or() {
+    println!("TODO")
+  }
+
+  #[rstest]
+  fn xor() {
+    println!("TODO")
   }
 }

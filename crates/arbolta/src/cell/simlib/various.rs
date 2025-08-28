@@ -52,17 +52,53 @@ pub struct BMux {
   y_nets: Box<[usize]>,
 }
 
+// "Selects between 'slices' of A where each value of S corresponds to a unique"
 impl CellFn for BMux {
   #[inline]
   fn eval(&mut self, signals: &mut Signals) {
     let select = BitVec::from(bits_from_nets(signals, &self.select_nets));
-    let start_net: usize = select.to_int::<usize>() * self.y_nets.len();
+    let start_net = select.to_int::<usize>() * self.y_nets.len();
     let end_net = start_net + self.y_nets.len();
 
+    // TODO: Don't read all bits
     let a = bits_from_nets(signals, &self.a_nets);
     (start_net..end_net)
       .zip(a)
       .for_each(|(n, b)| signals.set_net(n, b));
+  }
+
+  fn reset(&mut self) {}
+}
+// "Selects between 'slices' of B where each slice corresponds to a single bit
+// of S. Outputs A when all bits of S are low."
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+pub struct PMux {
+  select_nets: Box<[usize]>,
+  a_nets: Box<[usize]>, // output when S all low
+  b_nets: Box<[usize]>, // slices source
+  y_nets: Box<[usize]>, // slice size
+}
+
+impl CellFn for PMux {
+  #[inline]
+  fn eval(&mut self, signals: &mut Signals) {
+    // Should be power of 2?
+    // 0, 2, 4, 8
+    let select = BitVec::from(bits_from_nets(signals, &self.select_nets)).to_int::<usize>();
+    // let src_nets = &self.a_nets;
+    if select == 0 {
+      let a = bits_from_nets(signals, &self.a_nets);
+      copy_bits(signals, &self.y_nets, a);
+    } else {
+      let start_net = (select.ilog2() as usize) * self.y_nets.len();
+      let end_net = start_net + self.y_nets.len();
+
+      // TODO: Don't read all bits
+      let a = bits_from_nets(signals, &self.b_nets);
+      (start_net..end_net)
+        .zip(a)
+        .for_each(|(n, b)| signals.set_net(n, b));
+    }
   }
 
   fn reset(&mut self) {}
@@ -81,8 +117,14 @@ mod tests {
   fn mux() {
     println!("TODO");
   }
+
   #[rstest]
   fn bmux() {
+    println!("TODO");
+  }
+
+  #[rstest]
+  fn pmux() {
     println!("TODO");
   }
 }

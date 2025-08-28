@@ -171,3 +171,28 @@ impl YosysClient {
     Ok((response.netlist.unwrap(), response.topo_order.unwrap()))
   }
 }
+
+// TODO: De-duplicate with yosys_server
+/// Parse raw Yosys topological order output
+pub fn parse_torder(raw: &str) -> HashMap<String, Vec<String>> {
+  let mut torder: HashMap<String, Vec<String>> = HashMap::new();
+  let mut current_module: Option<&str> = None; // If Some, save cells
+
+  for line in raw.lines() {
+    let line = line.trim();
+
+    // Start new module
+    if let Some(module_name) = line.strip_prefix("module ") {
+      current_module = Some(module_name)
+    } else if let Some(module_name) = current_module
+      && let Some(cell_name) = line.strip_prefix("cell ")
+    {
+      torder
+        .entry(module_name.to_string())
+        .or_default()
+        .push(cell_name.to_string());
+    }
+  }
+
+  torder
+}

@@ -1,3 +1,5 @@
+use std::ops::{BitAnd, BitOr, BitXor};
+
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
 use bincode::{Decode, Encode};
@@ -26,9 +28,9 @@ impl CellFn for Not {
   fn reset(&mut self) {}
 }
 
-define_arithmetic_cell!(ProcAnd, &);
-define_arithmetic_cell!(ProcOr, |);
-define_arithmetic_cell!(ProcXor, ^);
+define_arithmetic_cell!(ProcAnd, bitand);
+define_arithmetic_cell!(ProcOr, bitor);
+define_arithmetic_cell!(ProcXor, bitxor);
 
 #[cfg(test)]
 mod tests {

@@ -56,8 +56,10 @@ pub enum Cell {
   Shl,
   Shr,
   Reg,
+  ALDff,
   Mux,
   BMux,
+  PMux,
   LogicAnd,
   LogicNot,
   ReduceOr,
@@ -284,6 +286,15 @@ pub fn create_cell(cell: &yosys_json::Cell) -> Result<Cell, CellError> {
       connections["D"].clone().into(),
       connections["Q"].clone().into(),
     )),
+    "$aldff" => Cell::ALDff(ALDff::new(
+      (parameters["CLK_POLARITY"] != 0).into(),
+      (parameters["ALOAD_POLARITY"] != 0).into(),
+      connections["CLK"][0],
+      connections["ALOAD"][0],
+      connections["AD"].clone().into(),
+      connections["D"].clone().into(),
+      connections["Q"].clone().into(),
+    )),
     "$mux" => Cell::Mux(Mux::new(
       connections["S"][0],
       connections["A"].clone().into(),
@@ -293,6 +304,12 @@ pub fn create_cell(cell: &yosys_json::Cell) -> Result<Cell, CellError> {
     "$bmux" => Cell::BMux(BMux::new(
       connections["S"].clone().into(),
       connections["A"].clone().into(),
+      connections["Y"].clone().into(),
+    )),
+    "$pmux" => Cell::PMux(PMux::new(
+      connections["S"].clone().into(),
+      connections["A"].clone().into(),
+      connections["B"].clone().into(),
       connections["Y"].clone().into(),
     )),
     "$logic_and" => Cell::LogicAnd(LogicAnd::new(

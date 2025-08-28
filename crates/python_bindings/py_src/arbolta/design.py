@@ -97,13 +97,14 @@ class HardwarePorts:
 
 
 class HardwareDesign:
-    def __init__(
+    def __init__(  # TODO: de-duplicate defaults
         self,
         top_module: str,
         netlist_path: str,
         config: dict[str, PortConfig],
-        yosys_path: str = "yosys",
-        yosys_server_path="yosys_server",
+        torder_path: Optional[str] = None,
+        yosys_path: Optional[str] = "yosys",
+        yosys_server_path: Optional[str] = "yosys_server",
     ):
         """
         Parameters
@@ -116,7 +117,9 @@ class HardwareDesign:
             Configuration for design ports.
         """
         self.top_module = top_module
-        self.design = Design(top_module, netlist_path, yosys_path, yosys_server_path)
+        self.design = Design(
+            top_module, netlist_path, torder_path, yosys_path, yosys_server_path
+        )
         self.ports = HardwarePorts(config, self.design)
 
     def reset(self):

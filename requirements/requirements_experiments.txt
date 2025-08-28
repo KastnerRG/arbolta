@@ -1,0 +1,4 @@
+array-api-compat
+brevitas @ git+https://github.com/Xilinx/brevitas.git@dev
+fxpmath
+tqdm

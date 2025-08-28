@@ -4,8 +4,8 @@ use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 
-define_arithmetic_cell!(Eq, ==);
-define_arithmetic_cell!(Ne, !=);
+define_arithmetic_cell!(Eq, &eq);
+define_arithmetic_cell!(Ne, &ne);
 
 #[cfg(test)]
 mod tests {

@@ -3,15 +3,16 @@ use crate::{bit::BitVec, signal::Signals};
 use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
+use std::ops::Rem;
 
-define_arithmetic_cell!(Add, +);
-define_arithmetic_cell!(Sub, -);
-define_arithmetic_cell!(Mul, *);
-define_arithmetic_cell!(Div, /);
-define_arithmetic_cell!(Modulus, %);
-define_arithmetic_cell!(Le, <);
-define_arithmetic_cell!(Gt, >);
-define_arithmetic_cell!(Ge, >=);
+define_arithmetic_cell!(Add, wrapping_add);
+define_arithmetic_cell!(Sub, wrapping_sub);
+define_arithmetic_cell!(Mul, wrapping_mul);
+define_arithmetic_cell!(Div, wrapping_div);
+define_arithmetic_cell!(Modulus, rem);
+define_arithmetic_cell!(Le, &lt);
+define_arithmetic_cell!(Gt, &gt);
+define_arithmetic_cell!(Ge, &ge);
 
 #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
 pub struct Neg {

@@ -20,7 +20,7 @@ pub fn bits_to_bool_numpy(bits: &BitVec, numpy_array: &Bound<'_, PyAny>) -> PyRe
 
 pub fn bool_numpy_to_bits(numpy_array: &Bound<'_, PyAny>) -> PyResult<BitVec> {
   let buffer = numpy_array.extract::<PyReadonlyArray1<bool>>()?;
-  Ok(BitVec::from_bools(buffer.to_owned_array()))
+  Ok(BitVec::from_iter(buffer.to_owned_array()))
 }
 
 pub fn bits_to_int_numpy<T: PrimInt + WrappingAdd + WrappingShl + WrappingSub + numpy::Element>(

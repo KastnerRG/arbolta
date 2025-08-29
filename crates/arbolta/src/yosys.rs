@@ -196,3 +196,6 @@ pub fn parse_torder(raw: &str) -> HashMap<String, Vec<String>> {
 
   torder
 }
+
+// Re-export
+pub use yosys_json::Netlist;

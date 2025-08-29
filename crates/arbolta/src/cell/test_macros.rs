@@ -1,8 +1,8 @@
 #[macro_export]
 macro_rules! make_unary_wires {
   ($a:expr, $y:expr) => {{
-    let a_size = $a.shape[1];
-    let y_size = $y.shape[1];
+    let a_size = $a.bits.len();
+    let y_size = $y.bits.len();
     let a_nets: Vec<usize> = (0..a_size).collect();
     let y_nets: Vec<usize> = (a_size..a_size + y_size).collect();
     (a_nets, y_nets)
@@ -15,9 +15,9 @@ pub(crate) use make_unary_wires;
 #[macro_export]
 macro_rules! make_binary_wires {
   ($a:expr, $b:expr, $y:expr) => {{
-    let a_size = $a.shape[1];
-    let b_size = $b.shape[1];
-    let y_size = $y.shape[1];
+    let a_size = $a.bits.len();
+    let b_size = $b.bits.len();
+    let y_size = $y.bits.len();
     let a_nets: Vec<usize> = (0..a_size).collect();
     let b_nets: Vec<usize> = (a_size..a_size + b_size).collect();
     let y_nets: Vec<usize> = (a_size + b_size..a_size + b_size + y_size).collect();

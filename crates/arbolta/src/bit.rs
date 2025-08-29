@@ -4,18 +4,17 @@
 use anyhow::Result;
 use bincode::{Decode, Encode};
 use core::fmt;
-use derive_more::{BitAnd, BitOr, BitXor, IntoIterator, Not};
+use derive_more::{BitAnd, BitOr, BitXor, Debug, IntoIterator, Not};
 use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingSub};
 use serde::{Deserialize, Serialize};
 use std::convert::{From, Into};
-use std::fmt::Debug;
 use std::str::FromStr;
 use thiserror::Error;
 
 /// Primitive signal value
 #[repr(transparent)]
 #[derive(
-  derive_more::Debug,
+  Debug,
   Clone,
   Eq,
   Copy,
@@ -147,22 +146,17 @@ impl From<BitVec> for String {
   }
 }
 
-impl BitVec {
-  /// Create from iterator of bools.
-  ///
-  /// # Arguments
-  /// * `vals` - Bools to convert.
-  pub fn from_bools<I>(vals: I) -> Self
-  where
-    I: IntoIterator<Item = bool>,
-  {
-    vals
+impl FromIterator<bool> for BitVec {
+  fn from_iter<I: IntoIterator<Item = bool>>(iter: I) -> Self {
+    iter
       .into_iter()
       .map(|b| b.into())
       .collect::<Vec<Bit>>()
       .into()
   }
+}
 
+impl BitVec {
   /// Create from int.
   ///
   /// # Arguments
@@ -240,7 +234,7 @@ impl BitVec {
   pub fn to_ints<T: PrimInt + WrappingAdd + WrappingShl + WrappingSub>(
     &self,
     elem_size: Option<usize>,
-  ) -> impl Iterator<Item = T> {
+  ) -> impl Iterator<Item = T> + '_ {
     // let elem_size = elem_size.unwrap_or(std::mem::size_of::<T>() * 8);
     let elem_size = elem_size.unwrap_or(self.shape[1]);
     self

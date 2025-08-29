@@ -50,7 +50,7 @@ fn test_str_to_bits(#[case] val: String, #[case] expected: Vec<Bit>) {
 ], "00100101"
 )]
 fn test_bools_to_bits(#[case] vals: Vec<bool>, #[case] expected: BitVec) {
-  assert_eq!(BitVec::from_bools(vals), expected)
+  assert_eq!(BitVec::from_iter(vals), expected)
 }
 
 #[rstest]

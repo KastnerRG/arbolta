@@ -38,7 +38,7 @@ impl Signals {
   #[inline]
   pub fn set_net(&mut self, net: usize, val: Bit) {
     // Constant or unchanged, do nothing
-    if !self.constant[net] && self.nets[net] == val {
+    if self.constant[net] || self.nets[net] == val {
       return;
     }
 

@@ -2,177 +2,116 @@
 // SPDX-License-Identifier: MIT
 
 use crate::bit::Bit;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
-pub type SignalIndex = usize;
-pub type SignalList = Vec<Signal>;
-pub type SignalIndexList = Vec<usize>;
-pub type SignalIndexMap = BTreeMap<String, SignalIndex>;
-
-/// Connection between cells/modules.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
-pub struct Net {
-  /// Name of net
-  pub name: String,
-  /// Index in netlist connections (proxy to Yosys bit)
-  pub index: usize,
-  /// Value of net
-  pub value: Bit,
+/// Connection between cells/modules and related statistics.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default, Encode, Decode)]
+pub struct Signals {
+  // Total number of nets
+  pub size: usize,
+  /// Value of nets
+  pub nets: Box<[Bit]>, // TODO: Make this private
+  // Is net constant
+  constant: Box<[bool]>,
   /// Number of times net has transitioned from 0 -> 1
-  pub toggle_count_rising: usize,
+  toggles_rising: Box<[u64]>,
   /// Number of times net has transitioned from 1 -> 0
-  pub toggle_count_falling: usize,
+  toggles_falling: Box<[u64]>,
 }
 
-/// Connection between cells/modules or constant.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub enum Signal {
-  Constant(Bit),
-  Net(Net),
-}
+impl Signals {
+  pub fn new(size: usize) -> Self {
+    Self {
+      size,
+      nets: vec![Bit::ZERO; size].into(),
+      constant: vec![false; size].into(),
+      toggles_rising: vec![0; size].into(),
+      toggles_falling: vec![0; size].into(),
+    }
+  }
 
-impl Signal {
-  /// Create a new constant.
+  /// Set value of net. Updates toggle statistics.
+  /// # Arguments
+  /// * `net` - Selected signal net.
+  /// * `val` - New `Bit` value to change `net` to.
+  #[inline]
+  pub fn set_net(&mut self, net: usize, val: Bit) {
+    // Constant or unchanged, do nothing
+    if self.constant[net] || self.nets[net] == val {
+      return;
+    }
+
+    match val {
+      Bit::ONE => self.toggles_rising[net] += 1,
+      Bit::ZERO => self.toggles_falling[net] += 1,
+    }
+
+    self.nets[net] = val;
+  }
+
+  /// Get value of net.
+  /// # Arguments
+  /// * `net` - Selected signal net.
+  #[inline]
+  pub fn get_net(&self, net: usize) -> Bit {
+    self.nets[net]
+  }
+
+  /// Make net constant.
+  /// Net cannot be updated until calling `unset_constant`.
   ///
   /// # Arguments
-  /// * `value` - Constant `Bit` value.
-  pub fn new_constant(value: Bit) -> Self {
-    Self::Constant(value)
+  /// * `net` - Selected signal net.
+  /// * `val` - Constant `Bit` value.
+  #[inline]
+  pub fn set_constant(&mut self, net: usize, val: Bit) {
+    self.constant[net] = true;
+    self.nets[net] = val;
   }
 
-  /// Create a new net.
+  /// Make net modifiable.
   ///
   /// # Arguments
-  /// * `index` - Net index.
-  pub fn new_net(index: usize) -> Self {
-    Self::Net(Net {
-      index,
-      ..Default::default()
-    })
+  /// * `net` - Selected signal net.
+  #[inline]
+  pub fn unset_constant(&mut self, net: usize) {
+    self.constant[net] = false;
   }
 
-  /// Create a new net.
+  /// Reset all nets to `Bit::ZERO` and clear statistics.
+  pub fn reset(&mut self) {
+    self.nets.iter_mut().for_each(|n| *n = Bit::ZERO);
+    self.constant.iter_mut().for_each(|c| *c = false);
+    self.toggles_rising.iter_mut().for_each(|t| *t = 0);
+    self.toggles_falling.iter_mut().for_each(|t| *t = 0);
+  }
+
+  /// Total number times `net` has been toggled since last reset.
+  /// Includes both rising (0->1) and falling (1->0).
   ///
   /// # Arguments
-  /// * `index` - Net index.
-  /// * `value` - Value to initialize net with.
-  pub fn new_net_from(index: usize, value: Bit) -> Self {
-    Self::Net(Net {
-      index,
-      value,
-      ..Default::default()
-    })
+  /// * `net` - Selected signal net.
+  #[inline]
+  pub fn get_total_toggles(&self, net: usize) -> u64 {
+    self.toggles_falling[net] + self.toggles_rising[net]
   }
 
-  /// Create a new list of `Signal`s.
-  /// List initialized with zero `Constant`s.
+  /// Total number times `net` has been toggled from 0 -> 1.
   ///
   /// # Arguments
-  /// * `size` - Size of list.
-  pub fn new_list(size: usize) -> SignalList {
-    let mut signal_list = SignalList::with_capacity(size);
-    for _ in 0..size {
-      signal_list.push(Self::new_constant(Bit::Zero));
-    }
-    signal_list
-  }
-}
-
-pub trait AccessSignal {
-  fn reset(&mut self);
-  fn set_name(&mut self, name: String);
-  fn get_name(&self) -> &str;
-  fn get_index(&self) -> usize;
-  fn get_value(&self) -> Bit;
-  fn set_value(&mut self, val: Bit);
-  fn get_total_toggle_count(&self) -> usize;
-  fn get_toggle_count_rising(&self) -> usize;
-  fn get_toggle_count_falling(&self) -> usize;
-}
-
-impl AccessSignal for Signal {
-  /// Reset signal value to zero.
-  /// Clear all signal statistics.
-  fn reset(&mut self) {
-    match self {
-      Signal::Constant(_) => (), // Do nothing
-      Signal::Net(net) => {
-        net.toggle_count_rising = 0;
-        net.toggle_count_falling = 0;
-        net.value = Bit::Zero;
-      }
-    }
+  /// * `net` - Selected signal net.
+  #[inline]
+  pub fn get_toggles_rising(&self, net: usize) -> u64 {
+    self.toggles_rising[net]
   }
 
-  /// Set name of signal.
-  fn set_name(&mut self, name: String) {
-    match self {
-      Signal::Constant(_) => (), // Do nothing
-      Signal::Net(net) => net.name = name,
-    }
-  }
-
-  /// Get name of signal.
-  fn get_name(&self) -> &str {
-    match self {
-      Signal::Constant(_) => "const", // Do nothing
-      Signal::Net(net) => &net.name,
-    }
-  }
-
-  /// Get netlist index of signal.
-  fn get_index(&self) -> usize {
-    match self {
-      Signal::Constant(_) => 0, // TODO: Improve constant handling
-      Signal::Net(net) => net.index,
-    }
-  }
-
-  /// Get value of signal.
-  fn get_value(&self) -> Bit {
-    match self {
-      Signal::Constant(bit) => *bit,
-      Signal::Net(net) => net.value,
-    }
-  }
-
-  /// Set value of signal. Updates toggle statistics.
-  fn set_value(&mut self, val: Bit) {
-    match self {
-      Signal::Constant(_) => (), // Do nothing
-      Signal::Net(net) => {
-        match &[net.value, val] {
-          [Bit::Zero, Bit::One] => net.toggle_count_rising += 1,
-          [Bit::One, Bit::Zero] => net.toggle_count_falling += 1,
-          [Bit::Zero, Bit::Zero] | [Bit::One, Bit::One] => return,
-        }
-        net.value = val;
-      }
-    }
-  }
-
-  /// Get total signal toggle count (rising + falling).
-  fn get_total_toggle_count(&self) -> usize {
-    match self {
-      Signal::Constant(_) => 0,
-      Signal::Net(net) => net.toggle_count_falling + net.toggle_count_rising,
-    }
-  }
-
-  /// Get total rising toggle count of signal.
-  fn get_toggle_count_rising(&self) -> usize {
-    match self {
-      Signal::Constant(_) => 0,
-      Signal::Net(net) => net.toggle_count_rising,
-    }
-  }
-
-  /// Get total falling toggle count of signal.
-  fn get_toggle_count_falling(&self) -> usize {
-    match self {
-      Signal::Constant(_) => 0,
-      Signal::Net(net) => net.toggle_count_falling,
-    }
+  /// Total number times `net` has been toggled from 1 -> 0.
+  ///
+  /// # Arguments
+  /// * `net` - Selected signal net.
+  #[inline]
+  pub fn get_toggles_falling(&self, net: usize) -> u64 {
+    self.toggles_falling[net]
   }
 }

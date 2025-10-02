@@ -1,0 +1,20 @@
+[package]
+name = "yosys_server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { workspace = true }
+tarpc = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde-error = { workspace = true }
+yosys-netlist-json = { workspace = true }
+tempfile = { workspace = true }
+thiserror = {workspace = true}
+
+[lib]
+name = "yosys_service"
+path = "src/lib.rs"

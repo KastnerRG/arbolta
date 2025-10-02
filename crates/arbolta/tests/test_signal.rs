@@ -2,84 +2,85 @@
 // SPDX-License-Identifier: MIT
 
 use arbolta::bit::Bit;
-use arbolta::signal::{AccessSignal, Signal};
+use arbolta::signal::Signals;
 
 #[test]
 fn test_signal_net_init() {
-  let x = Signal::new_net(0);
+  let x = Signals::new(1);
 
-  assert_eq!(x.get_value(), Bit::Zero);
-  assert_eq!(x.get_toggle_count_falling(), 0);
-  assert_eq!(x.get_toggle_count_rising(), 0);
-  assert_eq!(x.get_total_toggle_count(), 0);
-  assert_eq!(x.get_index(), 0);
+  assert_eq!(x.get_net(0), Bit::ZERO);
+  assert_eq!(x.get_toggles_falling(0), 0);
+  assert_eq!(x.get_toggles_rising(0), 0);
+  assert_eq!(x.get_total_toggles(0), 0);
 }
 
 #[test]
 fn test_signal_net_set_value() {
-  let mut x = Signal::new_net(0);
+  let mut x = Signals::new(1);
 
-  assert_eq!(x.get_value(), Bit::Zero);
-  x.set_value(Bit::One);
-  assert_eq!(x.get_value(), Bit::One);
+  assert_eq!(x.get_net(0), Bit::ZERO);
+  x.set_net(0, Bit::ONE);
+  assert_eq!(x.get_net(0), Bit::ONE);
 }
 
 #[test]
 fn test_signal_net_toggle_rising() {
-  let mut x = Signal::new_net(0);
+  let mut x = Signals::new(1);
 
-  assert_eq!(x.get_total_toggle_count(), 0);
-  assert_eq!(x.get_toggle_count_falling(), 0);
-  assert_eq!(x.get_toggle_count_rising(), 0);
+  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_falling(0), 0);
+  assert_eq!(x.get_toggles_rising(0), 0);
 
-  x.set_value(Bit::One);
+  x.set_net(0, Bit::ONE);
 
-  assert_eq!(x.get_total_toggle_count(), 1);
-  assert_eq!(x.get_toggle_count_falling(), 0);
-  assert_eq!(x.get_toggle_count_rising(), 1);
+  assert_eq!(x.get_total_toggles(0), 1);
+  assert_eq!(x.get_toggles_falling(0), 0);
+  assert_eq!(x.get_toggles_rising(0), 1);
 }
 
 #[test]
 fn test_signal_net_toggle_falling() {
-  let mut x = Signal::new_net_from(0, Bit::One);
+  let mut x = Signals::new(1);
+  x.nets[0] = Bit::ONE;
 
-  assert_eq!(x.get_total_toggle_count(), 0);
-  assert_eq!(x.get_toggle_count_falling(), 0);
-  assert_eq!(x.get_toggle_count_rising(), 0);
+  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_falling(0), 0);
+  assert_eq!(x.get_toggles_rising(0), 0);
 
-  x.set_value(Bit::Zero);
+  x.set_net(0, Bit::ZERO);
 
-  assert_eq!(x.get_total_toggle_count(), 1);
-  assert_eq!(x.get_toggle_count_falling(), 1);
-  assert_eq!(x.get_toggle_count_rising(), 0);
+  assert_eq!(x.get_total_toggles(0), 1);
+  assert_eq!(x.get_toggles_falling(0), 1);
+  assert_eq!(x.get_toggles_rising(0), 0);
 }
 
 #[test]
 fn test_signal_net_toggle_same_zero() {
-  let mut x = Signal::new_net(0);
+  let mut x = Signals::new(1);
 
-  assert_eq!(x.get_total_toggle_count(), 0);
-  assert_eq!(x.get_toggle_count_falling(), 0);
-  assert_eq!(x.get_toggle_count_rising(), 0);
+  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_falling(0), 0);
+  assert_eq!(x.get_toggles_rising(0), 0);
 
-  x.set_value(Bit::Zero);
+  x.set_net(0, Bit::ZERO);
 
-  assert_eq!(x.get_total_toggle_count(), 0);
-  assert_eq!(x.get_toggle_count_falling(), 0);
-  assert_eq!(x.get_toggle_count_rising(), 0);
+  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_falling(0), 0);
+  assert_eq!(x.get_toggles_rising(0), 0);
 }
 
 #[test]
 fn test_signal_net_toggle_same_one() {
-  let mut x = Signal::new_net_from(0, Bit::One);
+  let mut x = Signals::new(1);
+  x.nets[0] = Bit::ONE;
 
-  assert_eq!(x.get_total_toggle_count(), 0);
-  assert_eq!(x.get_toggle_count_falling(), 0);
-  assert_eq!(x.get_toggle_count_rising(), 0);
+  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_falling(0), 0);
+  assert_eq!(x.get_toggles_rising(0), 0);
 
-  x.set_value(Bit::One);
+  x.set_net(0, Bit::ONE);
 
-  assert_eq!(x.get_total_toggle_count(), 0);
-  assert_eq!(x.get_toggle_count_falling(), 0);
-  assert_eq!(x.get_toggle_count_rising(), 0);
+  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_falling(0), 0);
+  assert_eq!(x.get_toggles_rising(0), 0);
 }

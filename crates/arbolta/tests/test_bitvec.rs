@@ -2,65 +2,55 @@
 // SPDX-License-Identifier: MIT
 
 use arbolta::bit::{Bit, BitVec};
-use ndarray::{array, Array1};
-
+use ndarray::{Array1, array};
 use rstest::rstest;
 
 #[rstest] // TODO: Generate random bit patterns and check
 #[case(vec![
-  Bit::One,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
 ], "00100101")]
 fn test_bits_to_str(#[case] bits: Vec<Bit>, #[case] expected: String) {
-  let bits = BitVec { bits: bits };
+  let bits: BitVec = bits.into();
   assert_eq!(bits.to_string(), expected);
 }
 
 #[rstest]
 #[case("00100101", vec![
-  Bit::One,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
+  Bit::ONE,
+  Bit::ZERO,
+  Bit::ZERO,
 ]
 )]
 fn test_str_to_bits(#[case] val: String, #[case] expected: Vec<Bit>) {
-  assert_eq!(BitVec::try_from(val.as_str()).unwrap().bits, expected)
+  assert_eq!(BitVec::try_from(val.as_str()).unwrap(), expected.into())
 }
 
 #[rstest]
 #[case(vec![
+  true,
+  false,
+  true,
   false,
   false,
   true,
   false,
   false,
-  true,
-  false,
-  true,
-], vec![
-  Bit::One,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
-  Bit::One,
-  Bit::Zero,
-  Bit::Zero,
-]
+], "00100101"
 )]
-fn test_bools_to_bits(#[case] vals: Vec<bool>, #[case] expected: Vec<Bit>) {
-  assert_eq!(BitVec::from(vals).bits, expected)
+fn test_bools_to_bits(#[case] vals: Vec<bool>, #[case] expected: BitVec) {
+  assert_eq!(BitVec::from_iter(vals), expected)
 }
 
 #[rstest]
@@ -236,7 +226,7 @@ fn test_bits_to_i32(#[case] bits: BitVec, #[case] expected: i32) {
 #[case(182, "10110110")]
 #[case(171, "10101011")]
 fn test_u8_to_bits(#[case] val: u8, #[case] expected: BitVec) {
-  assert_eq!(BitVec::from_int(val).unwrap(), expected)
+  assert_eq!(BitVec::from_int(val, None), expected)
 }
 
 #[rstest]
@@ -253,83 +243,87 @@ fn test_u8_to_bits(#[case] val: u8, #[case] expected: BitVec) {
 #[case(39090, "1001100010110010")]
 #[case(36192, "1000110101100000")]
 fn test_u16_to_bits(#[case] val: u16, #[case] expected: BitVec) {
-  assert_eq!(BitVec::from_int(val).unwrap(), expected)
+  assert_eq!(BitVec::from_int(val, None), expected)
 }
 // TODO: Test other data types
 
 #[rstest] // Reversed element order for bits
-#[case(&[124, 70], "0100011001111100")]
-#[case(&[253, 43], "0010101111111101")]
-#[case(&[114, 74], "0100101001110010")]
-#[case(&[179, 61], "0011110110110011")]
-#[case(&[27, 184], "1011100000011011")]
-#[case(&[190, 97], "0110000110111110")]
-#[case(&[205, 117], "0111010111001101")]
-#[case(&[255, 111], "0110111111111111")]
-#[case(&[253, 176], "1011000011111101")]
-#[case(&[220, 231], "1110011111011100")]
-fn test_u8_vec_to_bits(#[case] vals: &[u8], #[case] expected: BitVec) {
-  assert_eq!(BitVec::from_ints(vals).unwrap(), expected);
+#[case(vec![124, 70], "0100011001111100")]
+#[case(vec![253, 43], "0010101111111101")]
+#[case(vec![114, 74], "0100101001110010")]
+#[case(vec![179, 61], "0011110110110011")]
+#[case(vec![27, 184], "1011100000011011")]
+#[case(vec![190, 97], "0110000110111110")]
+#[case(vec![205, 117], "0111010111001101")]
+#[case(vec![255, 111], "0110111111111111")]
+#[case(vec![253, 176], "1011000011111101")]
+#[case(vec![220, 231], "1110011111011100")]
+fn test_u8_vec_to_bits(#[case] vals: Vec<u8>, #[case] expected: BitVec) {
+  let actual = BitVec::from_ints(vals, None);
+  assert_eq!(actual.bits, expected.bits);
+  assert_eq!(actual.shape, [2, 8]);
 }
 
 #[rstest]
-#[case(&[0, -114], "1000111000000000")]
-#[case(&[-107, 89], "0101100110010101")]
-#[case(&[59, -99], "1001110100111011")]
-#[case(&[115, -117], "1000101101110011")]
-#[case(&[-90, 87], "0101011110100110")]
-#[case(&[-80, -49], "1100111110110000")]
-#[case(&[-88, 51], "0011001110101000")]
-#[case(&[-101, 62], "0011111010011011")]
-#[case(&[15, -27], "1110010100001111")]
-#[case(&[-58, -95], "1010000111000110")]
-fn test_i8_vec_to_bits(#[case] vals: &[i8], #[case] expected: BitVec) {
-  assert_eq!(BitVec::from_ints(vals).unwrap(), expected);
-}
-
-#[rstest]
-#[case(&[30, -44], 7, "10101000011110")]
-#[case(&[-19, -42], 7, "10101101101101")]
-#[case(&[3, -4], 4, "11000011")]
-#[case(&[1, -1], 2, "1101")]
-fn test_i8_vec_to_bits_sized(
-  #[case] vals: &[i8],
-  #[case] elem_size: usize,
+#[case(vec![0, -114], None, "1000111000000000")]
+#[case(vec![-107, 89], None, "0101100110010101")]
+#[case(vec![59, -99], None, "1001110100111011")]
+#[case(vec![115, -117], None, "1000101101110011")]
+#[case(vec![-90, 87], None, "0101011110100110")]
+#[case(vec![-80, -49], None, "1100111110110000")]
+#[case(vec![-88, 51], None, "0011001110101000")]
+#[case(vec![-101, 62], None, "0011111010011011")]
+#[case(vec![15, -27], None, "1110010100001111")]
+#[case(vec![-58, -95], None, "1010000111000110")]
+#[case(vec![30, -44], Some(7), "10101000011110")]
+#[case(vec![-19, -42], Some(7), "10101101101101")]
+#[case(vec![3, -4], Some(4), "11000011")]
+#[case(vec![1, -1], Some(2), "1101")]
+#[case(vec![1, -1], Some(10), "11111111110000000001")]
+fn test_i8_vec_to_bits(
+  #[case] vals: Vec<i8>,
+  #[case] elem_size: Option<usize>,
   #[case] expected: BitVec,
 ) {
-  assert_eq!(BitVec::from_ints_sized(vals, elem_size).unwrap(), expected);
+  let expected_shape = [vals.len(), elem_size.unwrap_or(i8::BITS as usize)];
+  let actual = BitVec::from_ints(vals, elem_size);
+  assert_eq!(actual.bits, expected.bits);
+  assert_eq!(actual.shape, expected_shape);
 }
 
 #[rstest]
-#[case("0100011001111100", &[124, 70])]
-#[case("0010101111111101", &[253, 43])]
-#[case("0100101001110010", &[114, 74])]
-#[case("0011110110110011", &[179, 61])]
-#[case("1011100000011011", &[27, 184])]
-#[case("0110000110111110", &[190, 97])]
-#[case("0111010111001101", &[205, 117])]
-#[case("0110111111111111", &[255, 111])]
-#[case("1011000011111101", &[253, 176])]
-#[case("1110011111011100", &[220, 231])]
-fn test_bits_to_u8_vec(#[case] bits: BitVec, #[case] expected: &[u8]) {
-  let actual: Vec<u8> = bits.to_ints();
+#[case("0100011001111100", vec![124, 70])]
+#[case("0010101111111101", vec![253, 43])]
+#[case("0100101001110010", vec![114, 74])]
+#[case("0011110110110011", vec![179, 61])]
+#[case("1011100000011011", vec![27, 184])]
+#[case("0110000110111110", vec![190, 97])]
+#[case("0111010111001101", vec![205, 117])]
+#[case("0110111111111111", vec![255, 111])]
+#[case("1011000011111101", vec![253, 176])]
+#[case("1110011111011100", vec![220, 231])]
+fn test_bits_to_u8_vec(#[case] bits: BitVec, #[case] expected: Vec<u8>) {
+  let actual: Vec<u8> = bits.to_ints(Some(u8::BITS as usize)).collect();
   assert_eq!(actual, expected);
 }
 
 #[rstest]
-#[case("0100011001111100", &[124, 70])]
-#[case("0010101111111101", &[253, 43])]
-#[case("0100101001110010", &[114, 74])]
-#[case("0011110110110011", &[179, 61])]
-#[case("1011100000011011", &[27, 184])]
-#[case("0110000110111110", &[190, 97])]
-#[case("0111010111001101", &[205, 117])]
-#[case("0110111111111111", &[255, 111])]
-#[case("1011000011111101", &[253, 176])]
-#[case("1110011111011100", &[220, 231])]
-fn test_bits_to_u8_vec_buffer(#[case] bits: BitVec, #[case] expected: &[u8]) {
+#[case("0100011001111100", vec![124, 70])]
+#[case("0010101111111101", vec![253, 43])]
+#[case("0100101001110010", vec![114, 74])]
+#[case("0011110110110011", vec![179, 61])]
+#[case("1011100000011011", vec![27, 184])]
+#[case("0110000110111110", vec![190, 97])]
+#[case("0111010111001101", vec![205, 117])]
+#[case("0110111111111111", vec![255, 111])]
+#[case("1011000011111101", vec![253, 176])]
+#[case("1110011111011100", vec![220, 231])]
+fn test_bits_to_u8_vec_buffer(#[case] bits: BitVec, #[case] expected: Vec<u8>) {
   let mut buffer: Vec<u8> = vec![0; expected.len()];
-  bits.to_ints_buffer(buffer.as_mut_slice());
+  bits
+    .to_ints(Some(u8::BITS as usize))
+    .enumerate()
+    .for_each(|(i, val)| buffer[i] = val);
 
   assert_eq!(buffer, expected);
 }
@@ -346,7 +340,8 @@ fn test_bits_to_u8_vec_buffer(#[case] bits: BitVec, #[case] expected: &[u8]) {
 #[case("1011000011111101", array![253, 176])]
 #[case("1110011111011100", array![220, 231])]
 fn test_bits_to_u8_ndarray(#[case] bits: BitVec, #[case] expected: Array1<u8>) {
-  let actual: Array1<u8> = bits.to_int_ndarray();
+  let elem_size = bits.shape[1] / expected.len();
+  let actual: Array1<u8> = bits.to_ints(Some(elem_size)).collect();
   assert_eq!(actual, expected);
 }
 
@@ -362,22 +357,27 @@ fn test_bits_to_u8_ndarray(#[case] bits: BitVec, #[case] expected: Array1<u8>) {
 #[case("1011000011111101", array![253, 176])]
 #[case("1110011111011100", array![220, 231])]
 fn test_bits_to_u8_ndarray_buffer(#[case] bits: BitVec, #[case] expected: Array1<u8>) {
+  let elem_size = bits.shape[1] / expected.len();
   let mut buffer: Array1<u8> = Array1::zeros([expected.len()]);
-  bits.to_int_ndarray_buffer(buffer.view_mut()).unwrap();
+  bits
+    .to_ints(Some(elem_size))
+    .zip(buffer.iter_mut())
+    .for_each(|(src, dst)| *dst = src);
+
   assert_eq!(buffer, expected);
 }
 
 #[rstest]
-#[case("10101000011110", 7, &[30, -44])]
-#[case("10101101101101", 7, &[-19, -42])]
-#[case("11000011", 4, &[3, -4])]
-#[case("1101", 2, &[1, -1])]
+#[case("10101000011110", 7, vec![30, -44])]
+#[case("10101101101101", 7, vec![-19, -42])]
+#[case("11000011", 4, vec![3, -4])]
+#[case("1101", 2, vec![1, -1])]
 fn test_bits_sized_to_i8_vec(
   #[case] bits: BitVec,
   #[case] elem_size: usize,
-  #[case] expected: &[i8],
+  #[case] expected: Vec<i8>,
 ) {
-  let actual: Vec<i8> = bits.to_ints_sized(elem_size);
+  let actual: Vec<i8> = bits.to_ints(Some(elem_size)).collect();
   assert_eq!(actual, expected);
 }
 
@@ -392,7 +392,11 @@ fn test_bits_sized_to_i8_vec_buffer(
   #[case] expected: &[i8],
 ) {
   let mut buffer: Vec<i8> = vec![0; expected.len()];
-  bits.to_ints_sized_buffer(elem_size, buffer.as_mut_slice());
+  bits
+    .to_ints(Some(elem_size))
+    .zip(buffer.iter_mut())
+    .for_each(|(src, dst)| *dst = src);
+
   assert_eq!(buffer, expected);
 }
 
@@ -408,23 +412,26 @@ fn test_bits_sized_to_i8_ndarray_buffer(
 ) {
   let mut buffer: Array1<i8> = Array1::zeros([expected.len()]);
   bits
-    .to_int_ndarray_sized_buffer(elem_size, buffer.view_mut())
-    .unwrap();
+    .to_ints(Some(elem_size))
+    .zip(buffer.iter_mut())
+    .for_each(|(src, dst)| *dst = src);
+
   assert_eq!(buffer, expected);
 }
 
 #[rstest]
-#[case("1000111000000000", &[0, -114])]
-#[case("0101100110010101", &[-107, 89])]
-#[case("1001110100111011", &[59, -99])]
-#[case("1000101101110011", &[115, -117])]
-#[case("0101011110100110", &[-90, 87])]
-#[case("1100111110110000", &[-80, -49])]
-#[case("0011001110101000", &[-88, 51])]
-#[case("0011111010011011", &[-101, 62])]
-#[case("1110010100001111", &[15, -27])]
-#[case("1010000111000110", &[-58, -95])]
-fn test_bits_to_i8_vec(#[case] bits: BitVec, #[case] expected: &[i8]) {
-  let actual: Vec<i8> = bits.to_ints();
+#[case("1000111000000000", vec![0, -114])]
+#[case("0101100110010101", vec![-107, 89])]
+#[case("1001110100111011", vec![59, -99])]
+#[case("1000101101110011", vec![115, -117])]
+#[case("0101011110100110", vec![-90, 87])]
+#[case("1100111110110000", vec![-80, -49])]
+#[case("0011001110101000", vec![-88, 51])]
+#[case("0011111010011011", vec![-101, 62])]
+#[case("1110010100001111", vec![15, -27])]
+#[case("1010000111000110", vec![-58, -95])]
+fn test_bits_to_i8_vec(#[case] bits: BitVec, #[case] expected: Vec<i8>) {
+  let elem_size = bits.shape[1] / expected.len();
+  let actual: Vec<i8> = bits.to_ints(Some(elem_size)).collect();
   assert_eq!(actual, expected);
 }

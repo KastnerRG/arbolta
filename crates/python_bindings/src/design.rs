@@ -4,41 +4,73 @@
 use crate::conversion::{
   bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits,
 };
-use arbol::cell::default_cell_library;
-use arbol::module::{design::Design, port::PortDirection};
-use arbol::synth::netlist::Netlist;
-use bincode;
+use arbol::hardware_module::HardwareModule;
+use arbol::port::PortDirection;
+use arbol::yosys::{YosysClient, parse_torder};
+use bincode::{Decode, Encode};
 use pyo3::exceptions::{PyAttributeError, PyException, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use yosys_netlist_json::Netlist;
 
 #[pyclass(dict, module = "arbolta", name = "Design")]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Decode, Encode)]
 pub struct PyDesign {
   #[pyo3(get)]
   pub top_module: String,
-  pub netlist_path: String,
-  design: Design,
+  pub netlist_path: String, // TODO: Replace this with actual netlist?
+  design: HardwareModule,   // TODO: RENAME
 }
 
 #[pymethods]
 impl PyDesign {
   #[new]
-  fn __new__(top_module: &str, netlist_path: &str) -> PyResult<Self> {
-    let cell_library = default_cell_library();
-    let netlist = match Netlist::from_yosys(netlist_path) {
-      Ok(netlist) => netlist,
-      Err(err) => return Err(PyException::new_err(format!("{err}"))),
-    };
+  #[pyo3(signature = (top_module, netlist_path, torder_path=None, yosys_path="yosys", yosys_server_path="yosys_server"))]
+  fn __new__(
+    top_module: &str,
+    netlist_path: &str,
+    torder_path: Option<&str>,
+    yosys_path: Option<&str>,
+    yosys_server_path: Option<&str>,
+  ) -> PyResult<Self> {
+    // Setup Yosys client
+    let mut client = YosysClient::default();
 
-    let module = match netlist.generate_module(top_module, &cell_library) {
-      Ok(module) => module,
-      Err(err) => return Err(PyException::new_err(format!("{err}"))),
-    };
+    if let Some(yosys_path) = yosys_path {
+      client.yosys_path = PathBuf::from(yosys_path)
+    }
 
-    let design = Design::from_module(module, cell_library);
+    if let Some(yosys_server_path) = yosys_server_path {
+      client.yosys_server_path = PathBuf::from(yosys_server_path)
+    }
+
+    // Read raw JSON netlist
+    let raw_netlist = std::fs::read(netlist_path)?;
+    let original_netlist =
+      Netlist::from_slice(&raw_netlist).map_err(|e| PyValueError::new_err(format!("{e}")))?;
+
+    // Get topological cell order and final netlist
+    let netlist: Netlist;
+    let torder: HashMap<String, Vec<String>>;
+
+    if let Some(torder_path) = torder_path {
+      let raw_torder =
+        std::fs::read_to_string(torder_path).map_err(|e| PyValueError::new_err(format!("{e}")))?;
+      torder = parse_torder(&raw_torder);
+      netlist = original_netlist;
+    } else {
+      // TODO: Probably don't flatten here, just get topological ordering
+      let rt = tokio::runtime::Runtime::new()?;
+      (netlist, torder) = rt
+        .block_on(client.flatten_netlist(top_module, original_netlist))
+        .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+    }
+
+    let design = HardwareModule::new(&netlist, &torder, top_module)
+      .map_err(|e| PyValueError::new_err(format!("{e}")))?;
 
     Ok(Self {
       top_module: top_module.to_string(),
@@ -48,11 +80,13 @@ impl PyDesign {
   }
 
   fn __setstate__(&mut self, state: &Bound<'_, PyBytes>) {
-    *self = bincode::deserialize(state.as_bytes()).unwrap();
+    let config = bincode::config::standard();
+    (*self, _) = bincode::decode_from_slice(state.as_bytes(), config).unwrap();
   }
 
   fn __getstate__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-    match bincode::serialize(&self) {
+    let config = bincode::config::standard();
+    match bincode::encode_to_vec(self, config) {
       Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
       Err(err) => Err(PyValueError::new_err(format!("{err}"))),
     }
@@ -69,23 +103,24 @@ impl PyDesign {
     }
   }
 
-  fn load(&self, path: &str) -> PyResult<Self> {
-    let design = match Design::load(path) {
-      Ok(design) => design,
+  #[staticmethod]
+  fn load(path: &str) -> PyResult<Self> {
+    let design = match HardwareModule::load(path) {
+      Ok(module) => module,
       Err(err) => return Err(PyValueError::new_err(format!("{err}"))),
     };
 
-    let top_module = design.module.name.clone();
+    let top_module = design.name.clone();
 
     Ok(Self {
       top_module,
-      netlist_path: String::new(), // leave this empty for now,
+      netlist_path: String::new(), // TODO: Fix
       design,
     })
   }
 
   fn get_port_shape(&self, name: &str) -> PyResult<[usize; 2]> {
-    match self.design.module.get_port_shape(name) {
+    match self.design.get_port_shape(name) {
       Ok(shape) => Ok(shape),
       Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
     }
@@ -100,98 +135,120 @@ impl PyDesign {
 
     let internal_shape = self.get_port_shape(name)?;
     let (num_elems, elem_size) = (shape[1], internal_shape[1] / shape[1]);
-    match self
-      .design
-      .module
-      .set_port_shape(name, &[num_elems, elem_size])
-    {
+    match self.design.set_port_shape(name, &[num_elems, elem_size]) {
       Ok(()) => Ok(()),
       Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
     }
   }
 
   fn get_module_names(&self) -> Vec<String> {
-    let mut names: Vec<String> = vec![];
+    self.design.submodules.keys().cloned().collect()
+  }
+
+  fn get_signal_map(&self) -> HashMap<String, Vec<usize>> {
     self
       .design
-      .module
-      .components
+      .signal_map
       .iter()
-      .for_each(|component| match component {
-        arbol::module::hardware_module::Component::Cell(_) => (),
-        arbol::module::hardware_module::Component::Module(module) => {
-          names.push(module.name.clone())
-        }
-      });
-    names
+      .map(|(name, nets)| (name.to_string(), nets.to_vec()))
+      .collect()
   }
 
-  fn set_clock(&mut self, name: &str) -> PyResult<()> {
-    match self.design.set_clock(name) {
+  fn get_cell_info(&self, py: Python<'_>) -> PyResult<PyObject> {
+    let all_cell_info = PyDict::new(py);
+    for (name, cell_type) in self.design.cell_info.iter() {
+      let cell_info = PyDict::new(py);
+      cell_info.set_item("type", cell_type)?;
+
+      // TODO: Add other fields
+      all_cell_info.set_item(name.clone(), cell_info)?;
+    }
+
+    Ok(all_cell_info.into())
+  }
+
+  pub fn stick_signal(&mut self, net: usize, val: bool) -> PyResult<()> {
+    match self.design.stick_signal(net, val.into()) {
       Ok(()) => Ok(()),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
+      Err(err) => Err(PyException::new_err(format!("{err}"))),
     }
   }
 
-  fn set_reset(&mut self, name: &str) -> PyResult<()> {
-    match self.design.set_reset(name) {
+  pub fn unstick_signal(&mut self, net: usize) -> PyResult<()> {
+    match self.design.unstick_signal(net) {
       Ok(()) => Ok(()),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
+      Err(err) => Err(PyException::new_err(format!("{err}"))),
     }
+  }
+
+  fn set_clock(&mut self, name: &str, polarity: bool) -> PyResult<()> {
+    let Some(nets) = self.design.signal_map.get(name) else {
+      return Err(PyException::new_err(format!("No signal `{name}`")));
+    };
+
+    if nets.len() != 1 {
+      return Err(PyException::new_err("Clock net ambiguous".to_string()));
+    }
+
+    self.design.set_clock(nets[0], polarity.into()).unwrap();
+
+    Ok(())
+  }
+
+  fn set_reset(&mut self, name: &str, polarity: bool) -> PyResult<()> {
+    let Some(nets) = self.design.signal_map.get(name) else {
+      return Err(PyException::new_err(format!("No signal `{name}`")));
+    };
+
+    if nets.len() != 1 {
+      return Err(PyException::new_err("Reset net ambiguous".to_string()));
+    }
+
+    self.design.set_reset(nets[0], polarity.into()).unwrap();
+
+    Ok(())
   }
 
   fn reset(&mut self) {
-    self.design.module.reset();
-  }
-
-  fn reset_clocked(&mut self) -> PyResult<()> {
-    match self.design.reset_clocked() {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
+    self.design.reset();
   }
 
   fn eval(&mut self) {
     self.design.eval();
   }
 
-  fn eval_clocked(&mut self) -> PyResult<()> {
-    match self.design.eval_clocked() {
+  // TODO: Fix this
+  fn eval_clocked(&mut self, cycles: u32) -> PyResult<()> {
+    match self.design.eval_clocked(Some(cycles)) {
       Ok(()) => Ok(()),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
+      Err(err) => Err(PyException::new_err(format!("{err}"))),
     }
   }
 
+  fn eval_reset_clocked(&mut self, cycles: u32) -> PyResult<()> {
+    match self.design.eval_reset_clocked(Some(cycles)) {
+      Ok(()) => Ok(()),
+      Err(err) => Err(PyException::new_err(format!("{err}"))),
+    }
+  }
+
+  #[allow(unused_variables)]
   fn get_module_breakdown(&self, name: &str) -> PyResult<HashMap<String, usize>> {
-    match self.design.get_module_breakdown(name) {
-      Ok(breakdown) => Ok(breakdown),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
+    todo!()
   }
 
+  #[allow(unused_variables)]
   fn get_module_area(&self, name: &str) -> PyResult<f64> {
-    match self.design.get_module_area(name) {
-      Ok(area) => Ok(area),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
+    todo!()
   }
 
+  #[allow(unused_variables)]
   fn get_module_total_toggle_count(&self, name: &str) -> PyResult<usize> {
-    match self.design.get_module_total_toggle_count(name) {
-      Ok(count) => Ok(count),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
-  }
-
-  fn get_port_string(&self, name: &str) -> PyResult<String> {
-    match self.design.module.get_port_string(name) {
-      Ok(bit_string) => Ok(bit_string),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
+    todo!()
   }
 
   fn is_port_input(&self, name: &str) -> PyResult<bool> {
-    let direction = match self.design.module.get_port_direction(name) {
+    let direction = match self.design.get_port_direction(name) {
       Ok(direction) => direction,
       Err(err) => return Err(PyAttributeError::new_err(format!("{err}"))),
     };
@@ -201,12 +258,13 @@ impl PyDesign {
 
   fn get_port_numpy(&self, name: &str, numpy_array: &Bound<'_, PyAny>) -> PyResult<()> {
     let item_type = numpy_array.getattr("dtype")?.getattr("str")?.to_string();
-    let shape = self.get_port_shape(name)?;
-    let elem_size = shape[1];
-    let bits = match self.design.module.get_port_bits(name) {
-      Ok(bits) => bits,
-      Err(err) => return Err(PyAttributeError::new_err(format!("{err}"))),
-    };
+    let elem_size = self.get_port_shape(name)?[1];
+
+    let bits = self
+      .design
+      .get_port(name)
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
+
     match item_type.as_str() {
       "|b1" => bits_to_bool_numpy(&bits, numpy_array),
       "|u1" | "<V1" => bits_to_int_numpy::<u8>(&bits, elem_size, numpy_array),
@@ -263,12 +321,13 @@ impl PyDesign {
       _ => {
         return Err(PyValueError::new_err(format!(
           "Unsupported item type: {item_type}"
-        )))
+        )));
       }
     };
-    match self.design.module.set_port_bits(name, &bits) {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
+
+    self
+      .design
+      .set_port(name, bits)
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))
   }
 }

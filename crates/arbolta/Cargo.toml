@@ -4,10 +4,6 @@ version = "0.1.0"
 authors = ["AMD Research & Advanced Development"]
 edition = "2024"
 
-[[bench]]
-name = "benchmark"
-harness = false
-
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }

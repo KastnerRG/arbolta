@@ -6,7 +6,7 @@ use crate::conversion::{
 };
 use arbol::hardware_module::HardwareModule;
 use arbol::port::PortDirection;
-use arbol::yosys::{YosysClient, parse_torder};
+use arbol::yosys::Netlist;
 use bincode::{Decode, Encode};
 use pyo3::exceptions::{PyAttributeError, PyException, PyValueError};
 use pyo3::prelude::*;
@@ -14,7 +14,6 @@ use pyo3::types::{PyBytes, PyDict};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use yosys_netlist_json::Netlist;
 
 #[pyclass(dict, module = "arbolta", name = "Design")]
 #[derive(Deserialize, Serialize, Decode, Encode)]
@@ -28,48 +27,14 @@ pub struct PyDesign {
 #[pymethods]
 impl PyDesign {
   #[new]
-  #[pyo3(signature = (top_module, netlist_path, torder_path=None, yosys_path="yosys", yosys_server_path="yosys_server"))]
-  fn __new__(
-    top_module: &str,
-    netlist_path: &str,
-    torder_path: Option<&str>,
-    yosys_path: Option<&str>,
-    yosys_server_path: Option<&str>,
-  ) -> PyResult<Self> {
-    // Setup Yosys client
-    let mut client = YosysClient::default();
-
-    if let Some(yosys_path) = yosys_path {
-      client.yosys_path = PathBuf::from(yosys_path)
-    }
-
-    if let Some(yosys_server_path) = yosys_server_path {
-      client.yosys_server_path = PathBuf::from(yosys_server_path)
-    }
-
+  #[pyo3(signature = (top_module, netlist_path))]
+  fn __new__(top_module: &str, netlist_path: &str) -> PyResult<Self> {
     // Read raw JSON netlist
     let raw_netlist = std::fs::read(netlist_path)?;
-    let original_netlist =
+    let netlist =
       Netlist::from_slice(&raw_netlist).map_err(|e| PyValueError::new_err(format!("{e}")))?;
 
-    // Get topological cell order and final netlist
-    let netlist: Netlist;
-    let torder: HashMap<String, Vec<String>>;
-
-    if let Some(torder_path) = torder_path {
-      let raw_torder =
-        std::fs::read_to_string(torder_path).map_err(|e| PyValueError::new_err(format!("{e}")))?;
-      torder = parse_torder(&raw_torder);
-      netlist = original_netlist;
-    } else {
-      // TODO: Probably don't flatten here, just get topological ordering
-      let rt = tokio::runtime::Runtime::new()?;
-      (netlist, torder) = rt
-        .block_on(client.flatten_netlist(top_module, original_netlist))
-        .map_err(|e| PyValueError::new_err(format!("{e}")))?;
-    }
-
-    let design = HardwareModule::new(&netlist, &torder, top_module)
+    let design = HardwareModule::new(top_module, &netlist)
       .map_err(|e| PyValueError::new_err(format!("{e}")))?;
 
     Ok(Self {
@@ -110,7 +75,7 @@ impl PyDesign {
       Err(err) => return Err(PyValueError::new_err(format!("{err}"))),
     };
 
-    let top_module = design.name.clone();
+    let top_module = design.top_module.clone();
 
     Ok(Self {
       top_module,
@@ -142,16 +107,11 @@ impl PyDesign {
   }
 
   fn get_module_names(&self) -> Vec<String> {
-    self.design.submodules.keys().cloned().collect()
+    self.design.submodules.keys().map(|p| p.join(".")).collect()
   }
 
   fn get_signal_map(&self) -> HashMap<String, Vec<usize>> {
-    self
-      .design
-      .signal_map
-      .iter()
-      .map(|(name, nets)| (name.to_string(), nets.to_vec()))
-      .collect()
+    self.design.get_all_signal_nets()
   }
 
   fn get_cell_info(&self, py: Python<'_>) -> PyResult<PyObject> {
@@ -182,7 +142,7 @@ impl PyDesign {
   }
 
   fn set_clock(&mut self, name: &str, polarity: bool) -> PyResult<()> {
-    let Some(nets) = self.design.signal_map.get(name) else {
+    let Some(nets) = self.design.get_signal_nets(name) else {
       return Err(PyException::new_err(format!("No signal `{name}`")));
     };
 
@@ -196,7 +156,7 @@ impl PyDesign {
   }
 
   fn set_reset(&mut self, name: &str, polarity: bool) -> PyResult<()> {
-    let Some(nets) = self.design.signal_map.get(name) else {
+    let Some(nets) = self.design.get_signal_nets(name) else {
       return Err(PyException::new_err(format!("No signal `{name}`")));
     };
 

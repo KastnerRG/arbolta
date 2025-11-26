@@ -1,9 +1,5 @@
 use anyhow::{Result, anyhow, ensure};
-use arbolta::{
-  bit::Bit,
-  hardware_module::HardwareModule,
-  yosys::{Netlist, parse_torder},
-};
+use arbolta::{bit::Bit, hardware_module::HardwareModule, yosys::Netlist};
 use clap::Parser;
 use fault::utils::matmul;
 // use indicatif::ParallelProgressIterator;
@@ -56,14 +52,12 @@ fn main() -> Result<()> {
 
   // Load and parse netlist and topological cell order
   let raw_netlist = std::fs::read(flags.netlist_path)?;
-  let raw_torder = std::fs::read_to_string(flags.torder_path)?;
   let netlist = Netlist::from_slice(&raw_netlist)?;
-  let torder = parse_torder(&raw_torder);
 
   // Setup design
   let (ROWS, COLS) = (flags.rows, flags.cols); // Copy for easier use
 
-  let mut design = HardwareModule::new(&netlist, &torder, &flags.top_module)?;
+  let mut design = HardwareModule::new(&flags.top_module, &netlist)?;
   design.set_clock(2, Bit::ONE)?;
   design.set_reset(3, Bit::ZERO)?;
   design.set_port_shape("sx_data_i", &[ROWS, flags.x_width])?;

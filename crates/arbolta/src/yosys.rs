@@ -1,3 +1,87 @@
+//   cell::CellError,
+// use crate::{
+// cell::CellError,
+// hardware_module::ModuleError,
+// port::{PortDirection, parse_bit},
+// temp2::{TopoCell, TopoNetMap},
+// };
+// use std::collections::HashMap;
+// use yosys_netlist_json as yosys_json;
+
+// #[derive(Debug, Clone, Eq, PartialEq, Default)]
+// pub struct SynthCell<'a> {
+//   cell_type: &'a str,
+//   parameters: HashMap<&'a str, usize>,
+//   // attributes: HashMap<&'a str, &'a str>,
+//   port_directions: HashMap<&'a str, PortDirection>,
+//   connections: HashMap<&'a str, Box<[usize]>>,
+// }
+
+// impl<'a> SynthCell<'a> {
+//   pub fn from_yosys(
+//     topo_cell: &TopoCell<'a>,
+//     global_nets: &TopoNetMap<'a>,
+//     netlist: &'a yosys_json::Netlist,
+//   ) -> Result<Self, CellError> {
+//     let mut cell = Self {
+//       cell_type: &topo_cell.cell_type,
+//       ..Default::default()
+//     };
+
+//     // TODO: error handling
+//     let mut synth_module = &netlist.modules[topo_cell.parents.last().unwrap().cell_type];
+//     let mut synth_cell = synth_module.cells[topo_cell.name];
+
+//     todo!()
+//   }
+// }
+
+// impl TryFrom<&yosys_json::Cell> for SynthCell {
+//   type Error = ModuleError;
+//   fn try_from(cell: &yosys_json::Cell) -> Result<Self, Self::Error> {
+//     let mut synth_cell = SynthCell {
+//       cell_type: cell.cell_type.to_string(),
+//       ..Default::default()
+//     };
+
+//     // Add connections and directions
+//     for (port_name, conn_bits) in cell.connections.iter() {
+//       let direction = PortDirection::try_from(&cell.port_directions[port_name])?;
+//       let conn_nets: Vec<usize> = conn_bits
+//         .iter()
+//         .map(parse_bit)
+//         .collect::<Result<Vec<_>, _>>()?;
+
+//       synth_cell
+//         .port_directions
+//         .insert(port_name.clone(), direction);
+//       synth_cell.connections.insert(port_name.clone(), conn_nets);
+//     }
+
+//     // Add parameters
+//     for (param_name, param) in cell.parameters.iter() {
+//       let Some(param) = param.to_number() else {
+//         // TODO: Clean this up
+//         return Err(CellError::Parameter(param_name.to_string(), param.clone()).into());
+//       };
+//       synth_cell.parameters.insert(param_name.to_string(), param);
+//     }
+
+//     // Add attributes
+//     for (attr_name, attr) in cell.attributes.iter() {
+//       let Some(attr) = attr.to_string_if_string() else {
+//         // TODO: Clean this up
+//         return Err(CellError::Attribute(attr_name.to_string(), attr.clone()).into());
+//       };
+//       synth_cell
+//         .attributes
+//         .insert(attr_name.to_string(), attr.to_string());
+//     }
+
+//     Ok(synth_cell)
+//   }
+// }
+
 use std::{
   collections::HashMap,
   net::{IpAddr, Ipv6Addr},

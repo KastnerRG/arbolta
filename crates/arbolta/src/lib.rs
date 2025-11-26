@@ -6,4 +6,5 @@ pub mod cell;
 pub mod hardware_module;
 pub mod port;
 pub mod signal;
+pub mod temp2;
 pub mod yosys;

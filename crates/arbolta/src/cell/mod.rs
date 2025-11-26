@@ -6,11 +6,10 @@ mod test_macros;
 pub use simcells::*;
 pub use simlib::*;
 
-use crate::{bit::Bit, signal::Signals};
+use crate::{bit::Bit, signal::Signals, temp2::TopoCell};
 use bincode::{Decode, Encode};
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use thiserror::Error;
 use yosys_netlist_json as yosys_json;
 
@@ -81,25 +80,270 @@ pub enum CellError {
   Direction(String),
   #[error("Bad parameter `{0}` = `{1:?}`")]
   Parameter(String, yosys_json::AttributeVal),
+  #[error("Bad attribute `{0}` = `{1:?}`")]
+  Attribute(String, yosys_json::AttributeVal),
 }
 
-/// Parse global net from `BitVal`.
-/// Errors if bit direction is not supported.
-fn parse_bit(bit: &yosys_json::BitVal) -> Result<usize, CellError> {
-  match bit {
-    yosys_json::BitVal::N(net) => Ok(*net),
-    yosys_json::BitVal::S(constant) => match constant {
-      yosys_json::SpecialBit::_0 => Ok(0), // Global 0
-      yosys_json::SpecialBit::_1 => Ok(1), // Global 1
-      yosys_json::SpecialBit::X => Err(CellError::Direction("X".to_string())),
-      yosys_json::SpecialBit::Z => Err(CellError::Direction("Z".to_string())),
-    },
-  }
-}
-
+// TODO: Make this take topo cell AND move into try_from
+// TODO: Move matching to hashmap of function pointers
+// will allow for different cell libraries... and reuse of cells in new ways
 /// Generate a cell given its Yosys netlist description
 /// # Arguments
 /// * `cell` - Yosys cell
+pub fn create_cell(cell: &TopoCell) -> Result<Cell, CellError> {
+  // TODO: Error handling..
+  let Some(connections) = &cell.connections else {
+    todo!()
+  };
+  let Some(parameters) = &cell.parameters else {
+    todo!()
+  };
+
+  let new_cell: Cell = match cell.cell_type.as_str() {
+    // Sim cells
+    "BUF" | "$_BUF_" => Cell::Buffer(Buffer::new(connections["A"][0], connections["Y"][0])),
+    "NOT" | "$_NOT_" => Cell::Inverter(Inverter::new(connections["A"][0], connections["Y"][0])),
+    "AND" | "$_AND_" => Cell::And(And::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["Y"][0],
+    )),
+    "NAND" | "$_NAND_" => Cell::Nand(Nand::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["Y"][0],
+    )),
+    "OR" | "$_OR_" => Cell::Or(Or::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["Y"][0],
+    )),
+    "NOR" | "$_NOR_" => Cell::Nor(Nor::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["Y"][0],
+    )),
+    "XOR" | "$_XOR_" => Cell::Xor(Xor::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["Y"][0],
+    )),
+    "XNOR" | "$_XNOR_" => Cell::Xnor(Xnor::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["Y"][0],
+    )),
+    "ANDNOT" | "$_ANDNOT_" => Cell::AndNot(AndNot::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["Y"][0],
+    )),
+    "ORNOT" | "$_ORNOT_" => Cell::OrNot(OrNot::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["Y"][0],
+    )),
+    "$_MUX_" => Cell::Mux2(Mux2::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["S"][0],
+      connections["Y"][0],
+    )),
+    "$_NMUX_" => Cell::NMux2(NMux2::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["S"][0],
+      connections["Y"][0],
+    )),
+    "$_AOI3_" => Cell::AndOrInvert(AndOrInvert::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["C"][0],
+      connections["Y"][0],
+    )),
+    "$_OAI3_ " => Cell::OrAndInvert(OrAndInvert::new(
+      connections["A"][0],
+      connections["B"][0],
+      connections["C"][0],
+      connections["Y"][0],
+    )),
+    "DFF" | "$_DFF_P_" => Cell::Dff(Dff::new(
+      Bit::ONE,
+      connections["C"][0],
+      connections["D"][0],
+      connections["Q"][0],
+    )),
+    "$_SDFF_PP0_ " => Cell::DffReset(DffReset::new(
+      Bit::ONE,
+      Bit::ONE,
+      Bit::ZERO,
+      connections["C"][0],
+      connections["R"][0],
+      connections["D"][0],
+      connections["Q"][0],
+    )),
+    // Sim lib
+    "$not" => Cell::Not(Not::new(
+      parameters["A_SIGNED"] != 0,
+      connections["A"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$pos" => Cell::Pos(Pos::new(
+      parameters["A_SIGNED"] != 0,
+      connections["A"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$neg" => Cell::Neg(Neg::new(
+      parameters["A_SIGNED"] != 0,
+      connections["A"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$add" => Cell::Add(Add::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$sub" => Cell::Sub(Sub::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$mul" => Cell::Mul(Mul::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$div" => Cell::Div(Div::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$mod" => Cell::Modulus(Modulus::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$le" => Cell::Le(Le::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$ge" => Cell::Ge(Ge::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$gt" => Cell::Gt(Gt::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$shl" => Cell::Shl(Shl::new(
+      parameters["A_SIGNED"] != 0,
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$shr" => Cell::Shr(Shr::new(
+      parameters["A_SIGNED"] != 0,
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$dff" => Cell::Reg(Reg::new(
+      (parameters["CLK_POLARITY"] != 0).into(),
+      connections["CLK"][0],
+      connections["D"].clone(),
+      connections["Q"].clone(),
+    )),
+    "$aldff" => Cell::ALDff(ALDff::new(
+      (parameters["CLK_POLARITY"] != 0).into(),
+      (parameters["ALOAD_POLARITY"] != 0).into(),
+      connections["CLK"][0],
+      connections["ALOAD"][0],
+      connections["AD"].clone(),
+      connections["D"].clone(),
+      connections["Q"].clone(),
+    )),
+    "$mux" => Cell::Mux(Mux::new(
+      connections["S"][0],
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$bmux" => Cell::BMux(BMux::new(
+      connections["S"].clone(),
+      connections["A"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$pmux" => Cell::PMux(PMux::new(
+      connections["S"].clone(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$logic_and" => Cell::LogicAnd(LogicAnd::new(
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$logic_not" => Cell::LogicNot(LogicNot::new(
+      connections["A"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$reduce_or" | "$reduce_bool" => Cell::ReduceOr(ReduceOr::new(
+      connections["A"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$reduce_and" => Cell::ReduceAnd(ReduceAnd::new(
+      connections["A"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$and" => Cell::ProcAnd(ProcAnd::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$or" => Cell::ProcOr(ProcOr::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$xor" => Cell::ProcXor(ProcXor::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$eq" => Cell::Eq(Eq::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    "$ne" => Cell::Ne(Ne::new(
+      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
+    )),
+    _ => return Err(CellError::Unsupported(cell.cell_type.to_string())),
+  };
+
+  Ok(new_cell)
+}
+
+/*
 pub fn create_cell(cell: &yosys_json::Cell) -> Result<Cell, CellError> {
   // Port name -> net
   let mut connections: HashMap<String, Vec<usize>> = HashMap::new();
@@ -207,160 +451,162 @@ pub fn create_cell(cell: &yosys_json::Cell) -> Result<Cell, CellError> {
     // Sim lib
     "$not" => Cell::Not(Not::new(
       parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["Y"].clone(),
     )),
     "$pos" => Cell::Pos(Pos::new(
       parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["Y"].clone(),
     )),
     "$neg" => Cell::Neg(Neg::new(
       parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["Y"].clone(),
     )),
     "$add" => Cell::Add(Add::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$sub" => Cell::Sub(Sub::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$mul" => Cell::Mul(Mul::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$div" => Cell::Div(Div::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$mod" => Cell::Modulus(Modulus::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$le" => Cell::Le(Le::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$ge" => Cell::Ge(Ge::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$gt" => Cell::Gt(Gt::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$shl" => Cell::Shl(Shl::new(
       parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$shr" => Cell::Shr(Shr::new(
       parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$dff" => Cell::Reg(Reg::new(
-      (parameters["CLK_POLARITY"] != 0).into(),
+      (parameters["CLK_POLARITY"] != 0),
       connections["CLK"][0],
-      connections["D"].clone().into(),
-      connections["Q"].clone().into(),
+      connections["D"].clone(),
+      connections["Q"].clone(),
     )),
     "$aldff" => Cell::ALDff(ALDff::new(
-      (parameters["CLK_POLARITY"] != 0).into(),
-      (parameters["ALOAD_POLARITY"] != 0).into(),
+      (parameters["CLK_POLARITY"] != 0),
+      (parameters["ALOAD_POLARITY"] != 0),
       connections["CLK"][0],
       connections["ALOAD"][0],
-      connections["AD"].clone().into(),
-      connections["D"].clone().into(),
-      connections["Q"].clone().into(),
+      connections["AD"].clone(),
+      connections["D"].clone(),
+      connections["Q"].clone(),
     )),
     "$mux" => Cell::Mux(Mux::new(
       connections["S"][0],
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$bmux" => Cell::BMux(BMux::new(
-      connections["S"].clone().into(),
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["S"].clone(),
+      connections["A"].clone(),
+      connections["Y"].clone(),
     )),
     "$pmux" => Cell::PMux(PMux::new(
-      connections["S"].clone().into(),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["S"].clone(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$logic_and" => Cell::LogicAnd(LogicAnd::new(
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$logic_not" => Cell::LogicNot(LogicNot::new(
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["Y"].clone(),
     )),
     "$reduce_or" | "$reduce_bool" => Cell::ReduceOr(ReduceOr::new(
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["Y"].clone(),
     )),
     "$reduce_and" => Cell::ReduceAnd(ReduceAnd::new(
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["Y"].clone(),
     )),
     "$and" => Cell::ProcAnd(ProcAnd::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$or" => Cell::ProcOr(ProcOr::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$xor" => Cell::ProcXor(ProcXor::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$eq" => Cell::Eq(Eq::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     "$ne" => Cell::Ne(Ne::new(
       (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
+      connections["A"].clone(),
+      connections["B"].clone(),
+      connections["Y"].clone(),
     )),
     _ => return Err(CellError::Unsupported(cell.cell_type.to_string())),
   };
 
   Ok(new_cell)
 }
+
+*/

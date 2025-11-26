@@ -28,3 +28,4 @@ yosys_server = { path = "../yosys_server" }
 criterion = "0.5"
 pprof = { version = "0.15", features = ["criterion", "flamegraph"] }
 once_cell = { workspace = true }
+petgraph = "0.8.3"

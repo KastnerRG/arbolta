@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
@@ -31,10 +31,10 @@ class PortConfig:
     """
 
     shape: Tuple[int, int] = (1, 1)
-    dtype: Union[np.dtype, type] = np.uint32
+    dtype: Union[np.dtype, type] = np.uint
     clock: bool = False
     reset: bool = False
-    polarity: Optional[int] = None
+    polarity: Optional[Literal[0, 1]] = None
 
 
 @dataclass
@@ -52,9 +52,17 @@ class HardwarePorts:
         for port_name, port_config in config.items():
             if port_config.reset and port_config.clock:
                 raise AttributeError(f"Port `{port_name}` cannot be a reset and clock")
+
             if port_config.reset:
+                if port_config.polarity not in [0, 1]:
+                    raise ValueError(f"Unsupported polarity: `{port_config.polarity}`")
+
                 design.set_reset(port_name, bool(port_config.polarity))
+
             elif port_config.clock:
+                if port_config.polarity not in [0, 1]:
+                    raise ValueError(f"Unsupported polarity: `{port_config.polarity}`")
+
                 design.set_clock(port_name, bool(port_config.polarity))
 
             design.set_port_shape(port_name, port_config.shape)
@@ -98,13 +106,7 @@ class HardwarePorts:
 
 class HardwareDesign:
     def __init__(  # TODO: de-duplicate defaults
-        self,
-        top_module: str,
-        netlist_path: str,
-        config: dict[str, PortConfig],
-        torder_path: Optional[str] = None,
-        yosys_path: Optional[str] = "yosys",
-        yosys_server_path: Optional[str] = "yosys_server",
+        self, top_module: str, netlist_path: str, config: dict[str, PortConfig]
     ):
         """
         Parameters
@@ -117,9 +119,7 @@ class HardwareDesign:
             Configuration for design ports.
         """
         self.top_module = top_module
-        self.design = Design(
-            top_module, netlist_path, torder_path, yosys_path, yosys_server_path
-        )
+        self.design = Design(top_module, netlist_path)
         self.ports = HardwarePorts(config, self.design)
 
     def reset(self):
@@ -148,7 +148,6 @@ class HardwareDesign:
             if port.updated:
                 self.design.set_port_numpy(port_name, port.data)
                 port.updated = False
-        # if self.design.is_port_input(port_name):
 
         self.design.eval()
 
@@ -162,11 +161,9 @@ class HardwareDesign:
         """
         port: Port
         for port_name, port in self.ports._ports.items():
-            # if self.design.is_port_input(port_name):
             if port.updated:
                 self.design.set_port_numpy(port_name, port.data)
                 port.updated = False
-                # self.design.set_port_numpy(port_name, port_array)
 
         self.design.eval_clocked(cycles)
 
@@ -240,6 +237,17 @@ class HardwareDesign:
         else:
             return self.design.get_module_total_toggle_count(module_name)
 
+    def submodule_toggles(
+        self, category: Literal["falling", "rising", "total"]
+    ) -> Dict[str, Dict[int, int]]:
+        return self.design.get_submodule_toggles(category)
+
+    def submodule_nets(self) -> Dict[str, int]:
+        return self.design.get_submodule_nets()
+
+    def submodule_net_map(self) -> Dict[str, Dict[str, list[int]]]:
+        return self.design.get_submodule_net_map()
+
     def module_names(self) -> List[str]:
         """
         Get names of modules in top-level design module.
@@ -251,8 +259,14 @@ class HardwareDesign:
         """
         return self.design.get_module_names()
 
+    def get_graph(self) -> str:
+        return self.design.get_graph()
+
     def signal_map(self) -> Dict[str, List[int]]:
         return self.design.get_signal_map()
+
+    def signal_nets_reverse(self) -> Dict[int, list[str]]:
+        return self.design.get_all_signal_nets_reverse()
 
     def stick_signal(self, net: int, val: Union[int, bool]) -> None:
         return self.design.stick_signal(net, bool(val))

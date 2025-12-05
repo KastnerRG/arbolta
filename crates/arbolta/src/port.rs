@@ -7,7 +7,9 @@ use std::fmt::Debug;
 use thiserror::Error;
 use yosys_netlist_json as yosys_json;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, Encode, Decode)]
+#[derive(
+  Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash, Deserialize, Serialize, Encode, Decode,
+)]
 pub enum PortDirection {
   Input,
   Output,

@@ -4,16 +4,19 @@
 use crate::conversion::{
   bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits,
 };
-use arbol::hardware_module::HardwareModule;
-use arbol::port::PortDirection;
-use arbol::yosys::Netlist;
+use arbol::{
+  hardware_module::{HardwareModule, ToggleCount},
+  port::PortDirection,
+  yosys::Netlist,
+};
 use bincode::{Decode, Encode};
-use pyo3::exceptions::{PyAttributeError, PyException, PyValueError};
-use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::{
+  exceptions::{PyAttributeError, PyException, PyValueError},
+  prelude::*,
+  types::{PyBytes, PyDict},
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 #[pyclass(dict, module = "arbolta", name = "Design")]
 #[derive(Deserialize, Serialize, Decode, Encode)]
@@ -62,19 +65,15 @@ impl PyDesign {
   }
 
   fn save(&self, path: &str) -> PyResult<()> {
-    match self.design.save(path) {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyValueError::new_err(format!("{err}"))),
-    }
+    self
+      .design
+      .save(path)
+      .map_err(|e| PyValueError::new_err(format!("{e}")))
   }
 
   #[staticmethod]
   fn load(path: &str) -> PyResult<Self> {
-    let design = match HardwareModule::load(path) {
-      Ok(module) => module,
-      Err(err) => return Err(PyValueError::new_err(format!("{err}"))),
-    };
-
+    let design = HardwareModule::load(path).map_err(|e| PyValueError::new_err(format!("{e}")))?;
     let top_module = design.top_module.clone();
 
     Ok(Self {
@@ -100,10 +99,14 @@ impl PyDesign {
 
     let internal_shape = self.get_port_shape(name)?;
     let (num_elems, elem_size) = (shape[1], internal_shape[1] / shape[1]);
-    match self.design.set_port_shape(name, &[num_elems, elem_size]) {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyAttributeError::new_err(format!("{err}"))),
-    }
+    self
+      .design
+      .set_port_shape(name, &[num_elems, elem_size])
+      .map_err(|e| PyValueError::new_err(format!("{e}")))
+  }
+
+  fn get_graph(&self) -> String {
+    self.design.graph.clone()
   }
 
   fn get_module_names(&self) -> Vec<String> {
@@ -112,6 +115,77 @@ impl PyDesign {
 
   fn get_signal_map(&self) -> HashMap<String, Vec<usize>> {
     self.design.get_all_signal_nets()
+  }
+
+  fn get_all_signal_nets(&self) -> HashMap<String, Vec<usize>> {
+    self.design.get_all_signal_nets()
+  }
+
+  fn get_all_signal_nets_reverse(&self) -> HashMap<usize, Vec<String>> {
+    self.design.get_all_signal_nets_reverse()
+  }
+
+  fn get_all_signal_values(&self) -> HashMap<String, Vec<bool>> {
+    let signal_values = self.design.get_all_signal_values();
+    HashMap::from_iter(
+      signal_values
+        .into_iter()
+        .map(|(name, bits)| (name, bits.into())),
+    )
+  }
+
+  fn get_submodule_nets(&self) -> PyResult<HashMap<String, Vec<usize>>> {
+    let submodule_nets = self
+      .design
+      .get_submodule_nets()
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
+
+    let submodule_nets = HashMap::from_iter(
+      submodule_nets
+        .into_iter()
+        .map(|(name, nets)| (name.join("."), nets.into_iter().collect())),
+    );
+
+    Ok(submodule_nets)
+  }
+
+  fn get_submodule_toggles(
+    &self,
+    category: &str,
+  ) -> PyResult<HashMap<String, HashMap<usize, u64>>> {
+    let category = match category {
+      "falling" => ToggleCount::Falling,
+      "rising" => ToggleCount::Rising,
+      "total" => ToggleCount::Total,
+      _ => {
+        return Err(PyValueError::new_err(format!(
+          "Unsupported category `{category}`"
+        )));
+      }
+    };
+
+    let submodule_toggles = self
+      .design
+      .get_submodule_toggles(category)
+      .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+
+    let submodule_toggles = HashMap::from_iter(
+      submodule_toggles
+        .into_iter()
+        .map(|(name, toggles)| (name.join("."), toggles)),
+    );
+
+    Ok(submodule_toggles)
+  }
+
+  fn get_submodule_net_map(&self) -> HashMap<String, HashMap<String, Vec<usize>>> {
+    HashMap::from_iter(
+      self
+        .design
+        .get_submodule_net_map()
+        .into_iter()
+        .map(|(name, nets)| (name.join("."), nets)),
+    )
   }
 
   fn get_cell_info(&self, py: Python<'_>) -> PyResult<PyObject> {
@@ -128,68 +202,72 @@ impl PyDesign {
   }
 
   pub fn stick_signal(&mut self, net: usize, val: bool) -> PyResult<()> {
-    match self.design.stick_signal(net, val.into()) {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyException::new_err(format!("{err}"))),
-    }
+    self
+      .design
+      .stick_signal(net, val.into())
+      .map_err(|e| PyException::new_err(format!("{e}")))
   }
 
   pub fn unstick_signal(&mut self, net: usize) -> PyResult<()> {
-    match self.design.unstick_signal(net) {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyException::new_err(format!("{err}"))),
-    }
+    self
+      .design
+      .unstick_signal(net)
+      .map_err(|e| PyException::new_err(format!("{e}")))
   }
 
   fn set_clock(&mut self, name: &str, polarity: bool) -> PyResult<()> {
-    let Some(nets) = self.design.get_signal_nets(name) else {
-      return Err(PyException::new_err(format!("No signal `{name}`")));
-    };
+    let nets = self
+      .design
+      .get_nets(name, None)
+      .ok_or(PyException::new_err(format!("No signal `{name}`")))?;
 
     if nets.len() != 1 {
       return Err(PyException::new_err("Clock net ambiguous".to_string()));
     }
 
-    self.design.set_clock(nets[0], polarity.into()).unwrap();
-
-    Ok(())
+    self
+      .design
+      .set_clock(nets[0], polarity.into())
+      .map_err(|e| PyException::new_err(format!("{e}")))
   }
 
   fn set_reset(&mut self, name: &str, polarity: bool) -> PyResult<()> {
-    let Some(nets) = self.design.get_signal_nets(name) else {
-      return Err(PyException::new_err(format!("No signal `{name}`")));
-    };
+    let nets = self
+      .design
+      .get_nets(name, None)
+      .ok_or(PyException::new_err(format!("No signal `{name}`")))?;
 
     if nets.len() != 1 {
       return Err(PyException::new_err("Reset net ambiguous".to_string()));
     }
 
-    self.design.set_reset(nets[0], polarity.into()).unwrap();
-
-    Ok(())
+    self
+      .design
+      .set_reset(nets[0], polarity.into())
+      .map_err(|e| PyException::new_err(format!("{e}")))
   }
 
   fn reset(&mut self) {
-    self.design.reset();
+    self.design.reset()
   }
 
   fn eval(&mut self) {
-    self.design.eval();
+    self.design.eval()
   }
 
   // TODO: Fix this
   fn eval_clocked(&mut self, cycles: u32) -> PyResult<()> {
-    match self.design.eval_clocked(Some(cycles)) {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyException::new_err(format!("{err}"))),
-    }
+    self
+      .design
+      .eval_clocked(Some(cycles))
+      .map_err(|e| PyException::new_err(format!("{e}")))
   }
 
   fn eval_reset_clocked(&mut self, cycles: u32) -> PyResult<()> {
-    match self.design.eval_reset_clocked(Some(cycles)) {
-      Ok(()) => Ok(()),
-      Err(err) => Err(PyException::new_err(format!("{err}"))),
-    }
+    self
+      .design
+      .eval_reset_clocked(Some(cycles))
+      .map_err(|e| PyException::new_err(format!("{e}")))
   }
 
   #[allow(unused_variables)]
@@ -208,10 +286,10 @@ impl PyDesign {
   }
 
   fn is_port_input(&self, name: &str) -> PyResult<bool> {
-    let direction = match self.design.get_port_direction(name) {
-      Ok(direction) => direction,
-      Err(err) => return Err(PyAttributeError::new_err(format!("{err}"))),
-    };
+    let direction = self
+      .design
+      .get_port_direction(name)
+      .map_err(|e| PyException::new_err(format!("{e}")))?;
 
     Ok(direction == PortDirection::Input)
   }

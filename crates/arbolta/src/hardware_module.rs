@@ -3,31 +3,33 @@
 
 use crate::{
   bit::{Bit, BitVec},
-  cell::{Cell, CellError, CellFn, create_cell},
+  cell::{CELL_DISPATCH, Cell, CellError, CellFn, create_cell},
+  graph::*,
   port::PortError,
   port::{Port, PortDirection, parse_bit},
   signal::Signals,
-  temp2::*,
   yosys::Netlist,
 };
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Debug};
+use std::{
+  collections::{HashMap, HashSet},
+  fmt::Debug,
+};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Decode, Encode)]
 pub enum CellType {
   Submodule(String),
+  Scopeinfo(String), // TODO: Convert this to submodule
   Primitive(String),
 }
 
 #[derive(Default, Clone, Debug, Deserialize, Serialize, Decode, Encode)]
 pub struct SubModule {
-  ports: HashMap<String, Port>,
-  nets: HashMap<String, Box<[usize]>>,
-  // TODO: make pointer to cells in hardware module?
-  // TODO: make pointer to cells in hardware module?
-  cells: HashMap<String, CellType>, // cell, cell type?
+  pub ports: HashMap<String, Port>,
+  pub nets: HashMap<String, Box<[usize]>>,
+  pub cells: HashMap<String, CellType>,
 }
 
 // Names
@@ -40,6 +42,8 @@ pub struct HardwareModule {
   pub cell_info: HashMap<String, String>,
   pub cells: Box<[Cell]>,
   pub submodules: SubmoduleMap,
+  pub graph: String, // TODO: Don't store this as a dot string...
+  // pub topo_cells: Vec<TopoCell>,
   pub clock_net: Option<(usize, Bit)>, // (net, polarity)
   pub reset_net: Option<(usize, Bit)>, // (net, polarity)
 }
@@ -70,12 +74,13 @@ pub enum ModuleError {
   MissingSubmodule(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub enum ToggleCount {
   Rising,
   Falling,
   Total,
 }
+
 fn get_submodules(
   parents: &[TopoCellParent],
   hierarchy: &TopoHierarchy,
@@ -93,15 +98,17 @@ fn get_submodules(
   // Create new submodule
   let mut submodule = SubModule::default();
   if let Some(synth_module) = netlist.modules.get(&top_parent.cell_type.to_string()) {
-    // TODO: Error checking?
     for (cell_name, cell_info) in &synth_module.cells {
-      // TODO: Make pointer to cell in HardwareModule cells
-      // TODO: Use hierarchy to tell if cell is submodule or not
-      let cell_type = if netlist.modules.contains_key(&cell_info.cell_type) {
-        CellType::Submodule(cell_info.cell_type.to_owned())
+      let cell_type = cell_info.cell_type.to_owned();
+
+      let cell_type = if CELL_DISPATCH.contains_key(&cell_type.as_str()) {
+        CellType::Primitive(cell_type)
+      } else if cell_type == "$scopeinfo" {
+        CellType::Scopeinfo(cell_type)
       } else {
-        CellType::Primitive(cell_info.cell_type.to_owned())
+        CellType::Submodule(cell_type)
       };
+
       submodule.cells.insert(cell_name.to_owned(), cell_type);
     }
 
@@ -167,11 +174,11 @@ impl HardwareModule {
 
     update_cells(topo_cells.as_mut_slice(), &global_nets, netlist)?;
 
-    let graph = build_graph(&top_module_parent, &topo_cells, &global_nets, netlist)?;
-    let topo_order = get_topo_cell_order(&graph);
+    // let graph = build_graph(&top_module_parent, &topo_cells, &global_nets, netlist)?;
+    let graph = build_graph(&topo_cells)?;
+    let topo_order = get_topo_cell_order(&topo_cells);
 
     let submodules = get_submodules(&[top_module_parent], &hierarchy, &global_nets, netlist)?;
-
     let cells: Vec<Cell> = topo_order
       .into_iter()
       .map(create_cell)
@@ -187,14 +194,16 @@ impl HardwareModule {
       cell_info: HashMap::new(),
       cells: cells.into_boxed_slice(),
       submodules,
+      graph,
       clock_net: None,
       reset_net: None,
     })
   }
 
-  pub fn get_signal_nets(&self, name: &str) -> Option<Box<[usize]>> {
-    let submodule = &self.submodules[std::slice::from_ref(&self.top_module)];
-    submodule.nets.get(name).cloned()
+  pub fn get_nets(&self, net_name: &str, parents: Option<&[String]>) -> Option<Box<[usize]>> {
+    let parents = parents.unwrap_or(std::slice::from_ref(&self.top_module));
+    let submodule = &self.submodules[parents];
+    submodule.nets.get(net_name).cloned()
   }
 
   pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
@@ -234,17 +243,15 @@ impl HardwareModule {
   }
 
   // Eval until all signals have settled
-  // TODO: Make this more efficient
   pub fn eval(&mut self) {
     loop {
-      let before = self.signals.nets.clone();
-
+      self.signals.clear_dirty();
       self
         .cells
         .iter_mut()
         .for_each(|cell| cell.eval(&mut self.signals));
 
-      if before == self.signals.nets {
+      if !self.signals.is_dirty() {
         break;
       }
     }
@@ -402,59 +409,155 @@ impl HardwareModule {
     all_nets
   }
 
-  // pub fn get_cell_breakdown(&self) -> HashMap<String, usize> {
-  //   todo!()
-  // }
-
-  // #[allow(unused_variables)]
-  // pub fn search_module_cell_breakdown(
-  //   &self,
-  //   name: &str,
-  // ) -> Result<HashMap<String, usize>, ModuleError> {
-  //   todo!()
-  // }
-
   // TODO: Add tests for these
-
   pub fn get_toggles(&self, category: ToggleCount) -> u64 {
-    let mut total: u64 = 0;
-    (0..self.signals.size).for_each(|i| {
-      total += match category {
-        ToggleCount::Falling => self.signals.get_toggles_falling(i),
-        ToggleCount::Rising => self.signals.get_toggles_rising(i),
-        ToggleCount::Total => self.signals.get_total_toggles(i),
-      }
-    });
-    total
+    let toggle_fn = match category {
+      ToggleCount::Falling => Signals::get_toggles_falling,
+      ToggleCount::Rising => Signals::get_toggles_rising,
+      ToggleCount::Total => Signals::get_toggles_total,
+    };
+
+    (0..self.signals.size).fold(0, |acc, i| acc + toggle_fn(&self.signals, i))
   }
 
-  // pub fn get_submodule_toggles(
+  // Returns all child_nets
+  fn find_nets_helper(
+    &self,
+    parents: Option<&[String]>,
+    filter_inputs: Option<bool>,
+    global_nets: &mut HashMap<Vec<String>, HashSet<usize>>,
+  ) -> Result<HashSet<usize>, ModuleError> {
+    // First time calling, parse top module
+    let parents = parents.unwrap_or(std::slice::from_ref(&self.top_module));
+
+    let Some(submodule) = self.submodules.get(parents) else {
+      return Err(ModuleError::MissingSubmodule(parents.join(".")));
+    };
+
+    // Collect all nets in submodule
+    let mut submodule_nets =
+      HashSet::<usize>::from_iter(submodule.nets.values().flatten().copied());
+
+    // First time calling, don't filter input nets
+    if filter_inputs.unwrap_or(false) {
+      // Collect all input nets
+      let mut input_nets = HashSet::<usize>::new();
+      for (port_name, port_info) in &submodule.ports {
+        if port_info.direction == PortDirection::Input
+          && let Some(nets) = submodule.nets.get(port_name)
+        {
+          input_nets.extend(nets);
+        }
+      }
+
+      submodule_nets = submodule_nets.difference(&input_nets).copied().collect();
+    }
+
+    // Parse children, collect all nets
+    let mut total_nets = HashSet::<usize>::new();
+    for (cell_name, cell_type) in &submodule.cells {
+      if let CellType::Submodule(_) = cell_type {
+        // Submodule child
+        let child_parents = [parents, &[cell_name.to_owned()]].concat();
+        let child_nets = self.find_nets_helper(Some(&child_parents), Some(true), global_nets)?;
+
+        total_nets.extend(child_nets);
+      }
+    }
+    // Filter out child nets
+    submodule_nets = submodule_nets.difference(&total_nets).copied().collect();
+
+    global_nets.insert(parents.to_vec(), submodule_nets.clone());
+    total_nets.extend(submodule_nets); // Add current submodule nets to total
+
+    Ok(total_nets)
+  }
+
+  pub fn get_submodule_nets(&self) -> Result<HashMap<Vec<String>, HashSet<usize>>, ModuleError> {
+    let mut submodule_nets = HashMap::new();
+    self.find_nets_helper(None, None, &mut submodule_nets)?;
+    Ok(submodule_nets)
+  }
+
+  pub fn get_submodule_toggles(
+    &self,
+    category: ToggleCount,
+  ) -> Result<HashMap<Vec<String>, HashMap<usize, u64>>, ModuleError> {
+    let mut total_toggles = HashMap::new();
+    let submodule_nets = self.get_submodule_nets()?;
+
+    let toggle_fn = match category {
+      ToggleCount::Falling => Signals::get_toggles_falling,
+      ToggleCount::Rising => Signals::get_toggles_rising,
+      ToggleCount::Total => Signals::get_toggles_total,
+    };
+
+    for (submodule_name, nets) in submodule_nets {
+      let toggles = nets
+        .into_iter()
+        .map(|n| (n, toggle_fn(&self.signals, n)))
+        .collect::<Vec<(usize, u64)>>();
+
+      total_toggles.insert(submodule_name, HashMap::from_iter(toggles));
+    }
+
+    Ok(total_toggles)
+  }
+
+  pub fn get_submodule_net_map(&self) -> HashMap<Vec<String>, HashMap<String, Vec<usize>>> {
+    HashMap::from_iter(self.submodules.iter().map(|(sub_name, sub)| {
+      (
+        sub_name.to_vec(),
+        HashMap::from_iter(
+          sub
+            .nets
+            .iter()
+            .map(|(net_name, nets)| (net_name.to_owned(), nets.to_vec())),
+        ),
+      )
+    }))
+  }
+
+  pub fn get_all_signal_nets_reverse(&self) -> HashMap<usize, Vec<String>> {
+    let signal_net_map = self.get_all_signal_nets();
+
+    let mut reverse_map = HashMap::<usize, Vec<String>>::new();
+    for (net_name, nets) in &signal_net_map {
+      if nets.len() > 1 {
+        for (i, &n) in nets.iter().enumerate() {
+          let entry = reverse_map.entry(n).or_default();
+          entry.push(format!("{net_name}[{i}]"));
+        }
+      } else {
+        let entry = reverse_map.entry(nets[0]).or_default();
+        entry.push(net_name.to_owned())
+      }
+    }
+
+    reverse_map
+  }
+
+  // fn find_cells_helper(
   //   &self,
-  //   name: &str,
-  //   category: ToggleCount,
-  // ) -> Result<u64, ModuleError> {
-  //   let Some(net_names) = self.submodules.get(name) else {
-  //     return Err(ModuleError::MissingSubmodule(name.to_string()));
+  //   parents: Option<&[String]>,
+  //   global_cells: &mut HashMap<Vec<String>, HashSet<String>>,
+  // ) -> Result<HashSet<String>, ModuleError> {
+  //   let parents = parents.unwrap_or(std::slice::from_ref(&self.top_module));
+
+  //   let Some(submodule) = self.submodules.get(parents) else {
+  //     return Err(ModuleError::MissingSubmodule(parents.join(".")));
   //   };
 
-  //   let mut total: u64 = 0;
-  //   for name in net_names {
-  //     self.ports[name].nets.iter().for_each(|&n| {
-  //       total += match category {
-  //         ToggleCount::Falling => self.signals.get_toggles_falling(n),
-  //         ToggleCount::Rising => self.signals.get_toggles_rising(n),
-  //         ToggleCount::Total => self.signals.get_total_toggles(n),
-  //       }
-  //     });
+  //   // let submodule_cells = vec![]
+  //   for (cell_name, cell_type) in &submodule.cells {
+  //     if let CellType::Primitive(cell_type) = cell_type {
+  //       todo!()
+  //     }
   //   }
 
-  //   Ok(total)
-  // }
-
-  // #[allow(unused_variables)]
-  // pub fn search_module_total_toggle_count(&self, name: &str) -> Result<usize, ModuleError> {
   //   todo!()
   // }
+
   // TODO: Fix
   #[allow(unused)]
   pub fn load(path: &str) -> anyhow::Result<Self> {

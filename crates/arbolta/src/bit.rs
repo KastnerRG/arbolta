@@ -7,8 +7,10 @@ use core::fmt;
 use derive_more::{BitAnd, BitOr, BitXor, Debug, IntoIterator, Not};
 use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingSub};
 use serde::{Deserialize, Serialize};
-use std::convert::{From, Into};
-use std::str::FromStr;
+use std::{
+  convert::{From, Into},
+  str::FromStr,
+};
 use thiserror::Error;
 
 /// Primitive signal value
@@ -99,6 +101,12 @@ impl From<Vec<Bit>> for BitVec {
   fn from(bits: Vec<Bit>) -> Self {
     let shape = [1, bits.len()];
     Self { bits, shape }
+  }
+}
+
+impl From<BitVec> for Vec<bool> {
+  fn from(value: BitVec) -> Self {
+    value.bits.iter().map(|&b| b.into()).collect()
   }
 }
 

@@ -138,8 +138,7 @@ fn test_cell_ternary(#[case] mut cell: Box<dyn CellFn>, #[case] cases: [(Bit, Bi
 
 #[rstest]
 fn test_cell_dff_posedge() {
-  // D, C, Q
-  let (data_in, clock, data_out) = (0, 1, 2);
+  let (clock, data_in, data_out) = (0, 1, 2);
   let mut cell = Dff::new(Bit::ONE, clock, data_in, data_out);
   let mut signals = Signals::new(3);
 
@@ -167,35 +166,40 @@ fn test_cell_dff_posedge() {
   assert_eq!(signals.get_net(data_out), Bit::ZERO);
 }
 
-/*
 #[rstest]
 fn test_cell_sdff_pp() {
-  // D, C, R, Q
-  let (data_in, clock, reset, data_out) = (0, 1, 2, 3);
-  let mut cell = DffReset::new(Bit::ONE, data_in, clock, reset, data_out);
-  let mut signals = vec![Signal::default(); 4].into_boxed_slice();
+  let (clock, reset, data_in, data_out) = (0, 1, 2, 3);
+  let mut cell = DffReset::new(
+    Bit::ONE,
+    Bit::ONE,
+    Bit::ZERO,
+    clock,
+    reset,
+    data_in,
+    data_out,
+  );
+  let mut signals = Signals::new(4);
 
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
+  assert_eq!(signals.get_net(data_out), Bit::ZERO);
 
-  signals[data_in].set_value(Bit::ONE);
+  signals.set_net(data_in, Bit::ONE);
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
+  assert_eq!(signals.get_net(data_out), Bit::ZERO);
 
-  signals[clock].set_value(Bit::ONE); // Rising edge
+  signals.set_net(clock, Bit::ONE); // Rising edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::ONE);
+  assert_eq!(signals.get_net(data_out), Bit::ONE);
 
-  signals[clock].set_value(Bit::ZERO); // Falling edge
+  signals.set_net(clock, Bit::ZERO); // Falling edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::ONE);
+  assert_eq!(signals.get_net(data_out), Bit::ONE);
 
-  signals[reset].set_value(Bit::ONE);
+  signals.set_net(reset, Bit::ONE);
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::ONE);
+  assert_eq!(signals.get_net(data_out), Bit::ONE);
 
-  signals[clock].set_value(Bit::ONE); // Rising edge
+  signals.set_net(clock, Bit::ONE); // Rising edge
   cell.eval(&mut signals);
-  assert_eq!(signals[data_out].get_value(), Bit::ZERO);
+  assert_eq!(signals.get_net(data_out), Bit::ZERO);
 }
-*/

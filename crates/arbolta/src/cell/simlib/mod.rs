@@ -1,5 +1,6 @@
-use super::CellFn;
+use super::{Cell, CellFn, CellRegistration};
 use crate::{bit::Bit, signal::Signals};
+use std::collections::BTreeMap;
 
 mod arithmetic;
 mod bool_ops;
@@ -147,3 +148,361 @@ pub use logic_reduce_ops::*;
 pub use registers::*;
 pub use shift_ops::*;
 pub use various::*;
+
+// TODO: clean up temp functions
+fn make_not(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Not::new(
+    parameters["A_SIGNED"] != 0,
+    connections["A"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_pos(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Pos::new(
+    parameters["A_SIGNED"] != 0,
+    connections["A"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+fn make_neg(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Neg::new(
+    parameters["A_SIGNED"] != 0,
+    connections["A"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_add(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Add::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_sub(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Sub::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_mul(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Mul::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_div(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Div::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_mod(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Modulus::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_le(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Le::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_ge(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Ge::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_gt(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Gt::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_shl(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Shl::new(
+    parameters["A_SIGNED"] != 0,
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_shr(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Shr::new(
+    parameters["A_SIGNED"] != 0,
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_dff(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Reg::new(
+    (parameters["CLK_POLARITY"] != 0).into(),
+    connections["CLK"][0],
+    connections["D"].clone(),
+    connections["Q"].clone(),
+  )
+  .into()
+}
+
+fn make_aldff(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  ALDff::new(
+    (parameters["CLK_POLARITY"] != 0).into(),
+    (parameters["ALOAD_POLARITY"] != 0).into(),
+    connections["CLK"][0],
+    connections["ALOAD"][0],
+    connections["AD"].clone(),
+    connections["D"].clone(),
+    connections["Q"].clone(),
+  )
+  .into()
+}
+
+fn make_mux(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Mux::new(
+    connections["S"][0],
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_bmux(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  BMux::new(
+    connections["S"].clone(),
+    connections["A"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+fn make_pmux(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  PMux::new(
+    connections["S"].clone(),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_logic_and(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  LogicAnd::new(
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_logic_not(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  LogicNot::new(connections["A"].clone(), connections["Y"].clone()).into()
+}
+
+fn make_reduce_or(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  ReduceOr::new(connections["A"].clone(), connections["Y"].clone()).into()
+}
+
+fn make_reduce_and(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  ReduceAnd::new(connections["A"].clone(), connections["Y"].clone()).into()
+}
+
+fn make_and(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  ProcAnd::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_or(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  ProcOr::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_xor(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  ProcXor::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_eq(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Eq::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+fn make_ne(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Ne::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
+inventory::submit! {CellRegistration::new(&["$not"], make_not)}
+inventory::submit! {CellRegistration::new(&["$pos"], make_pos)}
+inventory::submit! {CellRegistration::new(&["$neg"], make_neg)}
+inventory::submit! {CellRegistration::new(&["$add"], make_add)}
+inventory::submit! {CellRegistration::new(&["$sub"], make_sub)}
+inventory::submit! {CellRegistration::new(&["$mul"], make_mul)}
+inventory::submit! {CellRegistration::new(&["$div"], make_div)}
+inventory::submit! {CellRegistration::new(&["$mod"], make_mod)}
+inventory::submit! {CellRegistration::new(&["$le"], make_le)}
+inventory::submit! {CellRegistration::new(&["$ge"], make_ge)}
+inventory::submit! {CellRegistration::new(&["$gt"], make_gt)}
+inventory::submit! {CellRegistration::new(&["$shl"], make_shl)}
+inventory::submit! {CellRegistration::new(&["$shr"], make_shr)}
+inventory::submit! {CellRegistration::new(&["$dff"], make_dff)}
+inventory::submit! {CellRegistration::new(&["$aldff"], make_aldff)}
+inventory::submit! {CellRegistration::new(&["$mux"], make_mux)}
+inventory::submit! {CellRegistration::new(&["$bmux"], make_bmux)}
+inventory::submit! {CellRegistration::new(&["$pmux"], make_pmux)}
+inventory::submit! {CellRegistration::new(&["$logic_and"], make_logic_and)}
+inventory::submit! {CellRegistration::new(&["$logic_not"], make_logic_not)}
+inventory::submit! {CellRegistration::new(&["$reduce_or", "$reduce_bool"], make_reduce_or)}
+inventory::submit! {CellRegistration::new(&["$reduce_and"], make_reduce_and)}
+inventory::submit! {CellRegistration::new(&["$and"], make_and)}
+inventory::submit! {CellRegistration::new(&["$or"], make_or)}
+inventory::submit! {CellRegistration::new(&["$xor"], make_xor)}
+inventory::submit! {CellRegistration::new(&["$eq"], make_eq)}
+inventory::submit! {CellRegistration::new(&["$ne"], make_ne)}

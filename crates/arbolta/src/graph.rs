@@ -1,21 +1,23 @@
 use crate::{
+  cell::CELL_DISPATCH,
   hardware_module::ModuleError,
   port::{PortDirection, parse_bit},
 };
-use petgraph::visit::IntoNodeReferences;
-use petgraph::{prelude::*, visit::DfsPostOrder}; // dot::Dot
-use std::collections::{BTreeMap, HashMap, HashSet};
-// use std::io::Write;
+use derive_more::{Constructor, Display};
+use petgraph::{dot::Dot, prelude::*, visit::Topo};
+use std::{
+  collections::{BTreeMap, HashMap, HashSet},
+  fmt,
+};
 use yosys_netlist_json as yosys_json;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Default, derive_more::Constructor)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default, Constructor)]
 pub struct TopoCellParent {
   pub name: String,
   pub cell_type: String,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Default, derive_more::Display)]
-#[display("name: {name}")]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Default)]
 pub struct TopoCell {
   pub parents: Vec<TopoCellParent>,
   pub name: String,
@@ -25,6 +27,21 @@ pub struct TopoCell {
   pub connections: Option<BTreeMap<String, Box<[usize]>>>,
   pub port_directions: Option<BTreeMap<String, PortDirection>>,
   pub parameters: Option<BTreeMap<String, usize>>,
+}
+
+impl fmt::Display for TopoCell {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let parent_names = self
+      .parents
+      .iter()
+      .map(|p| p.name.as_str())
+      .collect::<Vec<&str>>()
+      .join(".");
+
+    let name = format!("{parent_names}.{}", self.name);
+
+    write!(f, "{name}, {}", self.cell_type)
+  }
 }
 
 pub fn collect_cells(
@@ -41,8 +58,8 @@ pub fn collect_cells(
   for (cell_name, cell_info) in &synth_module.cells {
     let cell_type = &cell_info.cell_type;
 
-    // Submodule
-    if netlist.modules.contains_key(cell_type) {
+    // Submodule (and NOT a primitive cell)
+    if netlist.modules.contains_key(cell_type) && !CELL_DISPATCH.contains_key(cell_type.as_str()) {
       let mut parents = parents.to_vec();
       parents.push(TopoCellParent {
         name: cell_name.to_owned(),
@@ -111,16 +128,6 @@ pub fn collect_nets(
     });
   }
 
-  // println!("GLOBAL NETS");
-  // for (key, val) in global_nets.iter() {
-  // println!("{key:?}");
-  // let mut vals: Vec<(&usize, &usize)> = val.iter().collect();
-  // vals.sort();
-  // for v in vals {
-  // println!("{v:?}");
-  // }
-  // }
-
   // Add rest of nets
   for n in &nets {
     if !global_nets[parent].contains_key(n) {
@@ -186,7 +193,8 @@ pub fn update_cells(
       if let Some(param) = param.to_number() {
         parameters.insert(param_name.to_string(), param);
       } else {
-        println!("Couldn't convert parameter `{param_name}={param:?}`");
+        // TODO: Handle later
+        println!("Ignoring parameter `{param_name}={param:?}`");
       }
     }
 
@@ -198,17 +206,22 @@ pub fn update_cells(
   Ok(())
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, derive_more::Display)]
-pub enum TopoNode {
-  Cell(TopoCell),
-  Net(usize),
-}
+// #[derive(Debug, Clone, Eq, PartialEq, Hash, Display)]
+// pub enum TopoNode {
+//   Cell(TopoCell),
+//   #[display("{name}[{offset}]")]
+//   Port {
+//     name: String,
+//     offset: usize,
+//   }, // Net(usize),
+// }
 // TODO: Change net node or graph edge to some enum/struct that has netname...
 // enum for multi bit port
 // enum::single net(name, b)
 // enum::multi net(name, index, b) merge later...
-pub type NetlistGraph = DiGraph<TopoNode, usize>;
+// pub type NetlistGraph = DiGraph<TopoNode, usize>;
 
+/*
 pub fn build_graph(
   top_module: &TopoCellParent,
   cells: &[TopoCell],
@@ -292,86 +305,148 @@ pub fn build_graph(
 
   Ok(graph)
 }
+*/
 
-pub fn get_topo_cell_order(graph: &NetlistGraph) -> Vec<&TopoCell> {
-  let mut cell_graph: DiGraph<&TopoCell, usize> = DiGraph::new();
-  let mut orig_cell_nodes = HashMap::<&TopoCell, NodeIndex>::new();
-  let mut cell_nodes = HashMap::<&TopoCell, NodeIndex>::new();
-
-  // Create new graph with only cell nodes
-  // Get node indices for cells in original graph
-  for (node_index, node) in graph.node_references() {
-    if let TopoNode::Cell(cell) = node {
-      orig_cell_nodes.insert(cell, node_index);
-      cell_nodes.insert(cell, cell_graph.add_node(cell));
+// TODO: rename
+fn build_port_net_map(cell: &TopoCell) -> HashMap<usize, TopoPort> {
+  let mut nets = HashMap::new();
+  for (port_name, conns) in cell.connections.as_ref().unwrap() {
+    for (i, &n) in conns.iter().enumerate() {
+      nets.insert(n, TopoPort::new(port_name.clone(), i));
     }
   }
 
-  // Create connections
-  for (cell, orig_node_index) in orig_cell_nodes {
-    // All neighbors should be net nodes
-    for net_index in graph.neighbors(orig_node_index) {
-      let TopoNode::Net(n) = &graph[net_index] else {
-        todo!()
-      };
+  nets
+}
 
-      // All neighbors should be cell nodes
-      for driven_node in graph.neighbors(net_index) {
-        let driver_node = &cell_nodes[cell];
-        let TopoNode::Cell(driven_cell) = graph.node_weight(driven_node).unwrap() else {
-          todo!()
-        };
-        let driven_node = &cell_nodes[driven_cell];
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Display, Constructor)]
+#[display("{port}[{offset}]")]
+pub struct TopoPort {
+  port: String,
+  offset: usize,
+}
 
-        cell_graph.add_edge(*driver_node, *driven_node, *n);
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Display, Constructor)]
+#[display("({net}, {src}, {dst})")]
+pub struct TopoEdge {
+  net: usize,
+  src: TopoPort,
+  dst: TopoPort,
+}
+
+pub type NetlistGraph<'a> = DiGraph<&'a TopoCell, TopoEdge>;
+
+// TODO: Merge with get_topo_cell_order...
+// pub fn build_graph(cells: &[TopoCell]) -> Result<NetlistGraph, ModuleError> {
+pub fn build_graph(cells: &[TopoCell]) -> Result<String, ModuleError> {
+  let mut graph = NetlistGraph::new();
+  let mut cell_nodes = HashMap::<&TopoCell, NodeIndex>::new();
+
+  let mut bit_drivers = HashMap::<usize, HashSet<&TopoCell>>::new();
+  let mut bit_users = HashMap::<usize, HashSet<&TopoCell>>::new();
+
+  for cell in cells {
+    // Check if primitive cell
+    if !CELL_DISPATCH.contains_key(cell.cell_type.as_str()) {
+      continue;
+    }
+
+    for (port_name, nets) in cell.connections.as_ref().unwrap() {
+      // TODO: Potentially filter here
+      if let Some(direction) = cell.port_directions.as_ref().unwrap().get(port_name) {
+        for &n in nets {
+          match direction {
+            // TODO: Do we need to clone?
+            PortDirection::Input => {
+              bit_users.entry(n).or_default().insert(cell);
+            }
+            PortDirection::Output => {
+              bit_drivers.entry(n).or_default().insert(cell);
+            }
+          }
+        }
+      }
+    }
+    cell_nodes.insert(cell, graph.add_node(cell));
+  }
+
+  for (net, user_cells) in &bit_users {
+    if let Some(drivers) = bit_drivers.get(net) {
+      for driver_cell in drivers {
+        let driver_nets = build_port_net_map(driver_cell);
+
+        for user_cell in user_cells {
+          let user_nets = build_port_net_map(user_cell);
+
+          let driver_node = &cell_nodes[driver_cell];
+          let user_node = &cell_nodes[user_cell];
+          let edge = TopoEdge::new(*net, driver_nets[net].to_owned(), user_nets[net].to_owned());
+
+          graph.add_edge(*driver_node, *user_node, edge);
+        }
       }
     }
   }
 
-  // TODO: check weight that node is == input
-  let mut topo_search = DfsPostOrder::new(&cell_graph, NodeIndex::from(0));
-  let mut found = vec![];
+  Ok(Dot::new(&graph).to_string())
+  // Ok(graph)
+}
 
-  while let Some(visited) = topo_search.next(&cell_graph) {
-    let cell = cell_graph.node_weight(visited).unwrap();
-    if cell.cell_type != "input" {
-      // Don't include input cell/node
-      found.push(*cell);
+// Based on https://github.com/YosysHQ/yosys/blob/main/passes/cmds/torder.cc
+pub fn get_topo_cell_order(cells: &[TopoCell]) -> Vec<&TopoCell> {
+  let mut graph: DiGraph<&TopoCell, usize> = DiGraph::new();
+  let mut cell_nodes = HashMap::<&TopoCell, NodeIndex>::new();
+
+  let mut bit_drivers = HashMap::<usize, HashSet<&TopoCell>>::new();
+  let mut bit_users = HashMap::<usize, HashSet<&TopoCell>>::new();
+
+  for cell in cells {
+    // Check if primitive cell
+    if !CELL_DISPATCH.contains_key(cell.cell_type.as_str()) {
+      continue;
+    }
+
+    for (port_name, nets) in cell.connections.as_ref().unwrap() {
+      if ["Q", "CTRL_OUT", "RD_DATA"].contains(&port_name.as_str()) {
+        // TODO: Add case for memrd
+        continue;
+      }
+
+      if let Some(direction) = cell.port_directions.as_ref().unwrap().get(port_name) {
+        for &n in nets {
+          match direction {
+            PortDirection::Input => {
+              bit_users.entry(n).or_default().insert(cell);
+            }
+            PortDirection::Output => {
+              bit_drivers.entry(n).or_default().insert(cell);
+            }
+          }
+        }
+      }
+    }
+    cell_nodes.insert(cell, graph.add_node(cell));
+  }
+
+  for (net, user_cells) in &bit_users {
+    if let Some(drivers) = bit_drivers.get(net) {
+      for driver_cell in drivers {
+        for user_cell in user_cells {
+          let driver_node = &cell_nodes[driver_cell];
+          let user_node = &cell_nodes[user_cell];
+
+          graph.add_edge(*driver_node, *user_node, *net);
+        }
+      }
     }
   }
 
-  found.reverse();
+  let mut topo_search = Topo::new(&graph);
+  let mut found = vec![];
+  while let Some(visited) = topo_search.next(&graph) {
+    let cell = graph.node_weight(visited).unwrap();
+    found.push(*cell);
+  }
+
   found
-}
-
-pub fn parse_module(
-  top_module: &str,
-  netlist: &yosys_json::Netlist,
-) -> Result<(NetlistGraph, TopoNetMap), ModuleError> {
-  let top_cell_parent = TopoCellParent {
-    name: top_module.to_string(),
-    cell_type: top_module.to_string(),
-  };
-
-  let flattened_cells = collect_cells(top_module, std::slice::from_ref(&top_cell_parent), netlist)?;
-  let hierarchy = get_cell_hierarchy(&flattened_cells);
-
-  let mut global_nets = TopoNetMap::new();
-  collect_nets(
-    &top_cell_parent,
-    &hierarchy,
-    netlist,
-    &mut global_nets,
-    &mut 0,
-  )?;
-
-  let graph = build_graph(&top_cell_parent, &flattened_cells, &global_nets, netlist)?;
-
-  // let dot_output = format!("{}", Dot::new(&graph));
-  // let mut file = std::fs::File::create("graph.dot").expect("Could not create file");
-  // file
-  //   .write_all(dot_output.as_bytes())
-  //   .expect("Could not write to file");
-
-  Ok((graph, global_nets))
 }

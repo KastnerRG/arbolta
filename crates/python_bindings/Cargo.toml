@@ -14,8 +14,7 @@ numpy = "0.24.0"
 num-traits = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 bincode = { workspace = true }
-yosys-netlist-json = { workspace = true }
-tokio = { workspace = true }
+thiserror = { workspace = true }
 
 [dependencies.arbolta]
 path = "../arbolta"

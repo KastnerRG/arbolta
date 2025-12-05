@@ -3,8 +3,8 @@
 
 pub mod bit;
 pub mod cell;
+pub mod graph;
 pub mod hardware_module;
 pub mod port;
 pub mod signal;
-pub mod temp2;
 pub mod yosys;

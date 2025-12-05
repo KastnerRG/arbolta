@@ -1,8 +1,9 @@
-use super::CellFn;
-use crate::{bit::Bit, signal::Signals};
+use super::{Cell, CellFn};
+use crate::{bit::Bit, cell::CellRegistration, signal::Signals};
 use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 macro_rules! define_unary_cell {
   ($name:ident, $body:expr) => {
@@ -157,9 +158,7 @@ impl CellFn for DffReset {
     // Rising edge
     if clock == Bit::ONE && self.last_clock == Bit::ZERO {
       // Check if reset active for any polarity
-      let reset = !(signals.get_net(self.reset_net) & self.reset_polarity);
-
-      if reset == Bit::ONE {
+      if signals.get_net(self.reset_net) == self.reset_polarity {
         signals.set_net(self.data_out_net, self.reset_val);
       } else {
         let data_in = signals.get_net(self.data_in_net);
@@ -174,3 +173,213 @@ impl CellFn for DffReset {
     self.last_clock = Bit::ZERO;
   }
 }
+
+// TODO: Create with macro...
+// Cell Constructor functions
+fn make_buf(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Buffer::new(connections["A"][0], connections["Y"][0]).into()
+}
+
+fn make_not(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Inverter::new(connections["A"][0], connections["Y"][0]).into()
+}
+
+fn make_and(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  And::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_nand(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Nand::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_or(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Or::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_nor(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Nor::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_xor(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Xor::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_xnor(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Xnor::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_andnot(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  AndNot::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_ornot(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  OrNot::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_mux(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Mux2::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["S"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_nmux(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  NMux2::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["S"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_andorinvert(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  AndOrInvert::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["C"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_orandinvert(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  OrAndInvert::new(
+    connections["A"][0],
+    connections["B"][0],
+    connections["C"][0],
+    connections["Y"][0],
+  )
+  .into()
+}
+
+fn make_dff(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  Dff::new(
+    Bit::ONE,
+    connections["C"][0],
+    connections["D"][0],
+    connections["Q"][0],
+  )
+  .into()
+}
+
+fn make_dffreset(
+  connections: &BTreeMap<String, Box<[usize]>>,
+  _parameters: &BTreeMap<String, usize>,
+) -> Cell {
+  DffReset::new(
+    Bit::ONE,
+    Bit::ONE,
+    Bit::ZERO,
+    connections["C"][0],
+    connections["R"][0],
+    connections["D"][0],
+    connections["Q"][0],
+  )
+  .into()
+}
+
+inventory::submit! {CellRegistration::new(&["BUF", "$_BUF_"], make_buf)}
+inventory::submit! {CellRegistration::new(&["NOT", "$_NOT_"], make_not)}
+inventory::submit! {CellRegistration::new(&["AND", "$_AND_"], make_and)}
+inventory::submit! {CellRegistration::new(&["NAND", "$_NAND_"], make_nand)}
+inventory::submit! {CellRegistration::new(&["OR", "$_OR_"], make_or)}
+inventory::submit! {CellRegistration::new(&["NOR", "$_NOR_"], make_nor)}
+inventory::submit! {CellRegistration::new(&["XOR", "$_XOR_"], make_xor)}
+inventory::submit! {CellRegistration::new(&["XNOR", "$_XNOR_"], make_xnor)}
+inventory::submit! {CellRegistration::new(&["ANDNOT", "$_ANDNOT_"], make_andnot)}
+inventory::submit! {CellRegistration::new(&["ORNOT", "$_ORNOT_"], make_ornot)}
+inventory::submit! {CellRegistration::new(&["$_MUX_"], make_mux)}
+inventory::submit! {CellRegistration::new(&["$_NMUX_"], make_nmux)}
+inventory::submit! {CellRegistration::new(&["$_AOI3_"], make_andorinvert)}
+inventory::submit! {CellRegistration::new(&["$_OAI3_"], make_orandinvert)}
+inventory::submit! {CellRegistration::new(&["DFF", "$_DFF_P_"], make_dff)}
+inventory::submit! {CellRegistration::new(&["$_SDFF_PP0_"], make_dffreset)}

@@ -1,13 +1,12 @@
 use super::{Cell, CellFn};
 use crate::{bit::Bit, cell::CellRegistration, signal::Signals};
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 macro_rules! define_unary_cell {
   ($name:ident, $body:expr) => {
-    #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+    #[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
     pub struct $name {
       a_net: usize,
       y_net: usize,
@@ -30,7 +29,7 @@ define_unary_cell!(Inverter, |x: Bit| !x);
 
 macro_rules! define_binary_cell {
   ($name:ident, $body:expr) => {
-    #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+    #[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
     pub struct $name {
       a_net: usize,
       b_net: usize,
@@ -60,7 +59,7 @@ define_binary_cell!(OrNot, |x: [Bit; 2]| x[0] | !x[1]);
 
 macro_rules! define_ternary_cell {
   ($name:ident, $op0_net:ident, $op1_net:ident, $op2_net:ident, $body:expr) => {
-    #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+    #[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
     pub struct $name {
       $op0_net: usize,
       $op1_net: usize,
@@ -106,7 +105,7 @@ define_ternary_cell!(
   |x: [Bit; 3]| if x[2].into() { !x[1] } else { !x[0] }
 );
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, derive_new::new)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
 pub struct Dff {
   polarity: Bit,
   clock_net: usize,
@@ -136,7 +135,7 @@ impl CellFn for Dff {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, derive_new::new)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
 pub struct DffReset {
   clock_polarity: Bit,
   reset_polarity: Bit,
@@ -177,22 +176,22 @@ impl CellFn for DffReset {
 // TODO: Create with macro...
 // Cell Constructor functions
 fn make_buf(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Buffer::new(connections["A"][0], connections["Y"][0]).into()
 }
 
 fn make_not(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Inverter::new(connections["A"][0], connections["Y"][0]).into()
 }
 
 fn make_and(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   And::new(
     connections["A"][0],
@@ -203,8 +202,8 @@ fn make_and(
 }
 
 fn make_nand(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Nand::new(
     connections["A"][0],
@@ -215,8 +214,8 @@ fn make_nand(
 }
 
 fn make_or(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Or::new(
     connections["A"][0],
@@ -227,8 +226,8 @@ fn make_or(
 }
 
 fn make_nor(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Nor::new(
     connections["A"][0],
@@ -239,8 +238,8 @@ fn make_nor(
 }
 
 fn make_xor(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Xor::new(
     connections["A"][0],
@@ -251,8 +250,8 @@ fn make_xor(
 }
 
 fn make_xnor(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Xnor::new(
     connections["A"][0],
@@ -263,8 +262,8 @@ fn make_xnor(
 }
 
 fn make_andnot(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   AndNot::new(
     connections["A"][0],
@@ -275,8 +274,8 @@ fn make_andnot(
 }
 
 fn make_ornot(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   OrNot::new(
     connections["A"][0],
@@ -287,8 +286,8 @@ fn make_ornot(
 }
 
 fn make_mux(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Mux2::new(
     connections["A"][0],
@@ -300,8 +299,8 @@ fn make_mux(
 }
 
 fn make_nmux(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   NMux2::new(
     connections["A"][0],
@@ -313,8 +312,8 @@ fn make_nmux(
 }
 
 fn make_andorinvert(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   AndOrInvert::new(
     connections["A"][0],
@@ -326,8 +325,8 @@ fn make_andorinvert(
 }
 
 fn make_orandinvert(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   OrAndInvert::new(
     connections["A"][0],
@@ -339,8 +338,8 @@ fn make_orandinvert(
 }
 
 fn make_dff(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Dff::new(
     Bit::ONE,
@@ -352,8 +351,8 @@ fn make_dff(
 }
 
 fn make_dffreset(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   DffReset::new(
     Bit::ONE,

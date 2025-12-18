@@ -42,23 +42,27 @@ fn copy_nets(signals: &mut Signals, src_nets: &[usize], dst_nets: &[usize]) {
 }
 
 #[inline(always)]
-fn copy_bits(signals: &mut Signals, dst_nets: &[usize], bits: impl IntoIterator<Item = Bit>) {
+fn copy_bits<'a>(
+  signals: &mut Signals,
+  dst_nets: &[usize],
+  bits: impl IntoIterator<Item = &'a Bit>,
+) {
   dst_nets
     .iter()
     .zip(bits)
-    .for_each(|(&n, b)| signals.set_net(n, b));
+    .for_each(|(&n, b)| signals.set_net(n, *b));
 }
 
 #[macro_export]
 macro_rules! define_arithmetic_cell {
   // Takes `b` by value
   ($name:ident, $op:ident) => {
-    #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+    #[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
     pub struct $name {
-      signed: bool,
-      a_nets: Box<[usize]>,
-      b_nets: Box<[usize]>,
-      y_nets: Box<[usize]>,
+      pub signed: bool,
+      pub a_nets: Box<[usize]>,
+      pub b_nets: Box<[usize]>,
+      pub y_nets: Box<[usize]>,
     }
 
     impl CellFn for $name {
@@ -87,7 +91,7 @@ macro_rules! define_arithmetic_cell {
           }
         };
 
-        copy_bits(signals, &self.y_nets, y);
+        copy_bits(signals, &self.y_nets, &y);
       }
 
       fn reset(&mut self) {}
@@ -95,7 +99,7 @@ macro_rules! define_arithmetic_cell {
   };
   // Takes `b` by reference
   ($name:ident, & $op:ident) => {
-    #[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+    #[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
     pub struct $name {
       signed: bool,
       a_nets: Box<[usize]>,
@@ -129,7 +133,7 @@ macro_rules! define_arithmetic_cell {
           }
         };
 
-        copy_bits(signals, &self.y_nets, y);
+        copy_bits(signals, &self.y_nets, &y);
       }
 
       fn reset(&mut self) {}
@@ -151,8 +155,8 @@ pub use various::*;
 
 // TODO: clean up temp functions
 fn make_not(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Not::new(
     parameters["A_SIGNED"] != 0,
@@ -163,8 +167,8 @@ fn make_not(
 }
 
 fn make_pos(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Pos::new(
     parameters["A_SIGNED"] != 0,
@@ -174,8 +178,8 @@ fn make_pos(
   .into()
 }
 fn make_neg(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Neg::new(
     parameters["A_SIGNED"] != 0,
@@ -186,8 +190,8 @@ fn make_neg(
 }
 
 fn make_add(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Add::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
@@ -199,8 +203,8 @@ fn make_add(
 }
 
 fn make_sub(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Sub::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
@@ -212,8 +216,8 @@ fn make_sub(
 }
 
 fn make_mul(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Mul::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
@@ -225,8 +229,8 @@ fn make_mul(
 }
 
 fn make_div(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Div::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
@@ -238,8 +242,8 @@ fn make_div(
 }
 
 fn make_mod(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Modulus::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
@@ -250,10 +254,7 @@ fn make_mod(
   .into()
 }
 
-fn make_le(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
-) -> Cell {
+fn make_le(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>) -> Cell {
   Le::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
     connections["A"].clone(),
@@ -263,10 +264,7 @@ fn make_le(
   .into()
 }
 
-fn make_ge(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
-) -> Cell {
+fn make_ge(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>) -> Cell {
   Ge::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
     connections["A"].clone(),
@@ -276,10 +274,7 @@ fn make_ge(
   .into()
 }
 
-fn make_gt(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
-) -> Cell {
+fn make_gt(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>) -> Cell {
   Gt::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
     connections["A"].clone(),
@@ -290,8 +285,8 @@ fn make_gt(
 }
 
 fn make_shl(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Shl::new(
     parameters["A_SIGNED"] != 0,
@@ -303,8 +298,8 @@ fn make_shl(
 }
 
 fn make_shr(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Shr::new(
     parameters["A_SIGNED"] != 0,
@@ -316,8 +311,8 @@ fn make_shr(
 }
 
 fn make_dff(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Reg::new(
     (parameters["CLK_POLARITY"] != 0).into(),
@@ -329,8 +324,8 @@ fn make_dff(
 }
 
 fn make_aldff(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   ALDff::new(
     (parameters["CLK_POLARITY"] != 0).into(),
@@ -345,8 +340,8 @@ fn make_aldff(
 }
 
 fn make_mux(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   Mux::new(
     connections["S"][0],
@@ -358,8 +353,8 @@ fn make_mux(
 }
 
 fn make_bmux(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   BMux::new(
     connections["S"].clone(),
@@ -368,9 +363,10 @@ fn make_bmux(
   )
   .into()
 }
+
 fn make_pmux(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   PMux::new(
     connections["S"].clone(),
@@ -382,8 +378,8 @@ fn make_pmux(
 }
 
 fn make_logic_and(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   LogicAnd::new(
     connections["A"].clone(),
@@ -394,29 +390,29 @@ fn make_logic_and(
 }
 
 fn make_logic_not(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   LogicNot::new(connections["A"].clone(), connections["Y"].clone()).into()
 }
 
 fn make_reduce_or(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   ReduceOr::new(connections["A"].clone(), connections["Y"].clone()).into()
 }
 
 fn make_reduce_and(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  _parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   ReduceAnd::new(connections["A"].clone(), connections["Y"].clone()).into()
 }
 
 fn make_and(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   ProcAnd::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
@@ -427,10 +423,7 @@ fn make_and(
   .into()
 }
 
-fn make_or(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
-) -> Cell {
+fn make_or(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>) -> Cell {
   ProcOr::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
     connections["A"].clone(),
@@ -441,8 +434,8 @@ fn make_or(
 }
 
 fn make_xor(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
   ProcXor::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
@@ -453,10 +446,7 @@ fn make_xor(
   .into()
 }
 
-fn make_eq(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
-) -> Cell {
+fn make_eq(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>) -> Cell {
   Eq::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
     connections["A"].clone(),
@@ -466,10 +456,7 @@ fn make_eq(
   .into()
 }
 
-fn make_ne(
-  connections: &BTreeMap<String, Box<[usize]>>,
-  parameters: &BTreeMap<String, usize>,
-) -> Cell {
+fn make_ne(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>) -> Cell {
   Ne::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
     connections["A"].clone(),

@@ -6,24 +6,17 @@ edition = "2024"
 
 [dependencies]
 anyhow = { workspace = true }
-bincode = { workspace = true }
 derive-new = "0.7"
 derive_more = { workspace = true }
 enum_dispatch = { workspace = true }
-# flexbuffers = { workspace = true }
-# futures = { workspace = true }
 indexmap = { workspace = true }
 inventory = "0.3.21"
 ndarray = { workspace = true }
 num-traits = { workspace = true }
-# criterion = "0.5"
-# pprof = { version = "0.15", features = ["criterion", "flamegraph"] }
 once_cell = { workspace = true }
 petgraph = { version = "0.8.3", features = ["serde-1"] }
+postcard = { workspace = true }
 rstest = { workspace = true }
 serde = { workspace = true }
-# serde-error = { workspace = true }
-# tarpc = { workspace = true }
-# tempfile = { workspace = true }smal
 thiserror = { workspace = true }
 yosys-netlist-json = { workspace = true }

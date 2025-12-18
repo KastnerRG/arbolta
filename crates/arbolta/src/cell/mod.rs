@@ -1,10 +1,9 @@
 mod simcells;
 mod simlib;
-mod test_macros;
+mod test_helpers;
 
 // Re-export
-use crate::{graph::TopoCell, signal::Signals};
-use bincode::{Decode, Encode};
+use crate::signal::Signals;
 use enum_dispatch::enum_dispatch;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -19,7 +18,8 @@ pub trait CellFn {
   fn reset(&mut self);
 }
 
-pub type CellCtor = fn(&BTreeMap<String, Box<[usize]>>, &BTreeMap<String, usize>) -> Cell;
+// connections, parameters
+pub type CellCtor = fn(&BTreeMap<&str, Box<[usize]>>, &BTreeMap<&str, usize>) -> Cell;
 pub type CellDispatchMap = HashMap<&'static str, CellCtor>;
 
 #[derive(derive_more::Constructor)]
@@ -41,7 +41,7 @@ pub static CELL_DISPATCH: Lazy<HashMap<&'static str, CellCtor>> = Lazy::new(|| {
 });
 
 #[enum_dispatch(CellFn)]
-#[derive(Debug, Serialize, Deserialize, Clone, Decode, Encode)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 /// Proxy for a standard-cell and basic unit of 'compute'.
 pub enum Cell {
   // Sim Cells
@@ -101,24 +101,14 @@ pub enum CellError {
   Direction(String),
 }
 
-// TODO: Make this take topo cell AND move into try_from
-// TODO: Move matching to hashmap of function pointers
-// will allow for different cell libraries... and reuse of cells in new ways
-/// Generate a cell given its Yosys netlist description
-/// # Arguments
-/// * `cell` - Yosys cell
-pub fn create_cell(cell: &TopoCell) -> Result<Cell, CellError> {
-  let cell_type = cell.cell_type.as_str();
+pub fn create_cell(
+  cell_type: &str,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
+) -> Result<Cell, CellError> {
   let ctor = CELL_DISPATCH
     .get(cell_type)
     .ok_or_else(|| CellError::Unsupported(cell_type.to_string()))?;
-
-  let Some(connections) = &cell.connections else {
-    todo!()
-  };
-  let Some(parameters) = &cell.parameters else {
-    todo!()
-  };
 
   Ok(ctor(connections, parameters))
 }

@@ -7,81 +7,85 @@ use crate::conversion::{
 use arbol::{
   hardware_module::{HardwareModule, ToggleCount},
   port::PortDirection,
-  yosys::Netlist,
+  yosys::{Netlist, parse_torder},
 };
-use bincode::{Decode, Encode};
 use pyo3::{
   exceptions::{PyAttributeError, PyException, PyValueError},
   prelude::*,
   types::{PyBytes, PyDict},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 #[pyclass(dict, module = "arbolta", name = "Design")]
-#[derive(Deserialize, Serialize, Decode, Encode)]
+#[derive(Deserialize, Serialize)] //Decode, Encode
 pub struct PyDesign {
   #[pyo3(get)]
   pub top_module: String,
-  pub netlist_path: String, // TODO: Replace this with actual netlist?
-  design: HardwareModule,   // TODO: RENAME
+  design: HardwareModule, // TODO: RENAME
 }
 
 #[pymethods]
 impl PyDesign {
   #[new]
-  #[pyo3(signature = (top_module, netlist_path))]
-  fn __new__(top_module: &str, netlist_path: &str) -> PyResult<Self> {
+  #[pyo3(signature = (netlist_path, top_module, torder_path))]
+  fn __new__(
+    netlist_path: PathBuf,
+    top_module: Option<&str>,
+    torder_path: PathBuf,
+  ) -> PyResult<Self> {
     // Read raw JSON netlist
     let raw_netlist = std::fs::read(netlist_path)?;
     let netlist =
       Netlist::from_slice(&raw_netlist).map_err(|e| PyValueError::new_err(format!("{e}")))?;
 
-    let design = HardwareModule::new(top_module, &netlist)
+    // Read raw torder
+    let raw_torder = std::fs::read_to_string(torder_path)?;
+    let torder = parse_torder(&raw_torder);
+
+    let design = HardwareModule::new(netlist, top_module, torder)
       .map_err(|e| PyValueError::new_err(format!("{e}")))?;
 
-    Ok(Self {
-      top_module: top_module.to_string(),
-      netlist_path: netlist_path.to_string(),
-      design,
-    })
+    let top_module = design.netlist.top_module.clone();
+
+    Ok(Self { top_module, design })
   }
 
-  fn __setstate__(&mut self, state: &Bound<'_, PyBytes>) {
-    let config = bincode::config::standard();
-    (*self, _) = bincode::decode_from_slice(state.as_bytes(), config).unwrap();
-  }
+  // fn __setstate__(&mut self, state: &Bound<'_, PyBytes>) {
+  //   let config = bincode::config::standard();
+  //   (*self, _) = bincode::decode_from_slice(state.as_bytes(), config).unwrap();
+  // }
 
-  fn __getstate__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-    let config = bincode::config::standard();
-    match bincode::encode_to_vec(self, config) {
-      Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
-      Err(err) => Err(PyValueError::new_err(format!("{err}"))),
-    }
-  }
+  // fn __getstate__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+  //   let config = bincode::config::standard();
+  //   match bincode::encode_to_vec(self, config) {
+  //     Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
+  //     Err(err) => Err(PyValueError::new_err(format!("{err}"))),
+  //   }
+  // }
 
-  fn __getnewargs__(&self) -> (String, String) {
-    (self.top_module.clone(), self.netlist_path.clone())
-  }
+  // fn __getnewargs__(&self) -> (String, String) {
+  //   (self.top_module.clone(), self.netlist_path.clone())
+  // }
 
-  fn save(&self, path: &str) -> PyResult<()> {
-    self
-      .design
-      .save(path)
-      .map_err(|e| PyValueError::new_err(format!("{e}")))
-  }
+  // fn save(&self, path: &str) -> PyResult<()> {
+  //   self
+  //     .design
+  //     .save(path)
+  //     .map_err(|e| PyValueError::new_err(format!("{e}")))
+  // }
 
-  #[staticmethod]
-  fn load(path: &str) -> PyResult<Self> {
-    let design = HardwareModule::load(path).map_err(|e| PyValueError::new_err(format!("{e}")))?;
-    let top_module = design.top_module.clone();
+  // #[staticmethod]
+  // fn load(path: &str) -> PyResult<Self> {
+  //   let design = HardwareModule::load(path).map_err(|e| PyValueError::new_err(format!("{e}")))?;
+  //   let top_module = design.top_module.clone();
 
-    Ok(Self {
-      top_module,
-      netlist_path: String::new(), // TODO: Fix
-      design,
-    })
-  }
+  //   Ok(Self {
+  //     top_module,
+  //     netlist_path: String::new(), // TODO: Fix
+  //     design,
+  //   })
+  // }
 
   fn get_port_shape(&self, name: &str) -> PyResult<[usize; 2]> {
     match self.design.get_port_shape(name) {
@@ -105,101 +109,108 @@ impl PyDesign {
       .map_err(|e| PyValueError::new_err(format!("{e}")))
   }
 
-  fn get_graph(&self) -> String {
-    self.design.graph.clone()
-  }
+  // fn get_graph(&self) -> String {
+  //   self.design.graph.clone()
+  // }
 
   fn get_module_names(&self) -> Vec<String> {
-    self.design.submodules.keys().map(|p| p.join(".")).collect()
-  }
-
-  fn get_signal_map(&self) -> HashMap<String, Vec<usize>> {
-    self.design.get_all_signal_nets()
-  }
-
-  fn get_all_signal_nets(&self) -> HashMap<String, Vec<usize>> {
-    self.design.get_all_signal_nets()
-  }
-
-  fn get_all_signal_nets_reverse(&self) -> HashMap<usize, Vec<String>> {
-    self.design.get_all_signal_nets_reverse()
-  }
-
-  fn get_all_signal_values(&self) -> HashMap<String, Vec<bool>> {
-    let signal_values = self.design.get_all_signal_values();
-    HashMap::from_iter(
-      signal_values
-        .into_iter()
-        .map(|(name, bits)| (name, bits.into())),
-    )
-  }
-
-  fn get_submodule_nets(&self) -> PyResult<HashMap<String, Vec<usize>>> {
-    let submodule_nets = self
+    // TODO: How to handle top_module?
+    self
       .design
-      .get_submodule_nets()
-      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
-
-    let submodule_nets = HashMap::from_iter(
-      submodule_nets
-        .into_iter()
-        .map(|(name, nets)| (name.join("."), nets.into_iter().collect())),
-    );
-
-    Ok(submodule_nets)
+      .netlist
+      .modules
+      .iter()
+      .map(|p| p.join("."))
+      .collect()
   }
 
-  fn get_submodule_toggles(
-    &self,
-    category: &str,
-  ) -> PyResult<HashMap<String, HashMap<usize, u64>>> {
-    let category = match category {
-      "falling" => ToggleCount::Falling,
-      "rising" => ToggleCount::Rising,
-      "total" => ToggleCount::Total,
-      _ => {
-        return Err(PyValueError::new_err(format!(
-          "Unsupported category `{category}`"
-        )));
-      }
-    };
+  // fn get_signal_map(&self) -> HashMap<String, Vec<usize>> {
+  //   self.design.get_all_signal_nets()
+  // }
 
-    let submodule_toggles = self
-      .design
-      .get_submodule_toggles(category)
-      .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+  // fn get_all_signal_nets(&self) -> HashMap<String, Vec<usize>> {
+  //   self.design.get_all_signal_nets()
+  // }
 
-    let submodule_toggles = HashMap::from_iter(
-      submodule_toggles
-        .into_iter()
-        .map(|(name, toggles)| (name.join("."), toggles)),
-    );
+  // fn get_all_signal_nets_reverse(&self) -> HashMap<usize, Vec<String>> {
+  //   self.design.get_all_signal_nets_reverse()
+  // }
 
-    Ok(submodule_toggles)
-  }
+  // fn get_all_signal_values(&self) -> HashMap<String, Vec<bool>> {
+  //   let signal_values = self.design.get_all_signal_values();
+  //   HashMap::from_iter(
+  //     signal_values
+  //       .into_iter()
+  //       .map(|(name, bits)| (name, bits.into())),
+  //   )
+  // }
 
-  fn get_submodule_net_map(&self) -> HashMap<String, HashMap<String, Vec<usize>>> {
-    HashMap::from_iter(
-      self
-        .design
-        .get_submodule_net_map()
-        .into_iter()
-        .map(|(name, nets)| (name.join("."), nets)),
-    )
-  }
+  // fn get_submodule_nets(&self) -> PyResult<HashMap<String, Vec<usize>>> {
+  //   let submodule_nets = self
+  //     .design
+  //     .get_submodule_nets()
+  //     .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
 
-  fn get_cell_info(&self, py: Python<'_>) -> PyResult<PyObject> {
-    let all_cell_info = PyDict::new(py);
-    for (name, cell_type) in self.design.cell_info.iter() {
-      let cell_info = PyDict::new(py);
-      cell_info.set_item("type", cell_type)?;
+  //   let submodule_nets = HashMap::from_iter(
+  //     submodule_nets
+  //       .into_iter()
+  //       .map(|(name, nets)| (name.join("."), nets.into_iter().collect())),
+  //   );
 
-      // TODO: Add other fields
-      all_cell_info.set_item(name.clone(), cell_info)?;
-    }
+  //   Ok(submodule_nets)
+  // }
 
-    Ok(all_cell_info.into())
-  }
+  // fn get_submodule_toggles(
+  //   &self,
+  //   category: &str,
+  // ) -> PyResult<HashMap<String, HashMap<usize, u64>>> {
+  //   let category = match category {
+  //     "falling" => ToggleCount::Falling,
+  //     "rising" => ToggleCount::Rising,
+  //     "total" => ToggleCount::Total,
+  //     _ => {
+  //       return Err(PyValueError::new_err(format!(
+  //         "Unsupported category `{category}`"
+  //       )));
+  //     }
+  //   };
+
+  //   let submodule_toggles = self
+  //     .design
+  //     .get_submodule_toggles(category)
+  //     .map_err(|e| PyValueError::new_err(format!("{e}")))?;
+
+  //   let submodule_toggles = HashMap::from_iter(
+  //     submodule_toggles
+  //       .into_iter()
+  //       .map(|(name, toggles)| (name.join("."), toggles)),
+  //   );
+
+  //   Ok(submodule_toggles)
+  // }
+
+  // fn get_submodule_net_map(&self) -> HashMap<String, HashMap<String, Vec<usize>>> {
+  //   HashMap::from_iter(
+  //     self
+  //       .design
+  //       .get_submodule_net_map()
+  //       .into_iter()
+  //       .map(|(name, nets)| (name.join("."), nets)),
+  //   )
+  // }
+
+  // fn get_cell_info(&self, py: Python<'_>) -> PyResult<PyObject> {
+  //   let all_cell_info = PyDict::new(py);
+  //   for (name, cell_type) in self.design.cell_info.iter() {
+  //     let cell_info = PyDict::new(py);
+  //     cell_info.set_item("type", cell_type)?;
+
+  //     // TODO: Add other fields
+  //     all_cell_info.set_item(name.clone(), cell_info)?;
+  //   }
+
+  //   Ok(all_cell_info.into())
+  // }
 
   pub fn stick_signal(&mut self, net: usize, val: bool) -> PyResult<()> {
     self
@@ -218,7 +229,7 @@ impl PyDesign {
   fn set_clock(&mut self, name: &str, polarity: bool) -> PyResult<()> {
     let nets = self
       .design
-      .get_nets(name, None)
+      .get_net(name)
       .ok_or(PyException::new_err(format!("No signal `{name}`")))?;
 
     if nets.len() != 1 {
@@ -234,7 +245,7 @@ impl PyDesign {
   fn set_reset(&mut self, name: &str, polarity: bool) -> PyResult<()> {
     let nets = self
       .design
-      .get_nets(name, None)
+      .get_net(name)
       .ok_or(PyException::new_err(format!("No signal `{name}`")))?;
 
     if nets.len() != 1 {

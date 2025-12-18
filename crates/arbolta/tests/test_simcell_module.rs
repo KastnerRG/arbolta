@@ -4,6 +4,7 @@
 use arbolta::{bit::BitVec, hardware_module::HardwareModule};
 use once_cell::sync::Lazy;
 use rstest::rstest;
+use std::collections::HashMap;
 use yosys_netlist_json::Netlist;
 
 static CELL_WRAPPER_NETLIST: Lazy<Netlist> =
@@ -19,7 +20,9 @@ static CELL_WRAPPER_NETLIST: Lazy<Netlist> =
     (1, 0),
 ])]
 fn test_module_unary_cell(#[case] cell: &str, #[case] cases: [(u8, u8); 2]) {
-  let mut module = HardwareModule::new(cell, &CELL_WRAPPER_NETLIST).unwrap();
+  let cell_type = cell.strip_suffix("_WRAPPER").unwrap();
+  let torder = HashMap::from([(cell, vec![cell_type])]);
+  let mut module = HardwareModule::new(CELL_WRAPPER_NETLIST.clone(), Some(cell), torder).unwrap();
 
   for (a, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
@@ -73,7 +76,9 @@ fn test_module_unary_cell(#[case] cell: &str, #[case] cases: [(u8, u8); 2]) {
     (1, 1, 1),
 ])]
 fn test_module_binary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8); 4]) {
-  let mut module = HardwareModule::new(cell, &CELL_WRAPPER_NETLIST).unwrap();
+  let cell_type = cell.strip_suffix("_WRAPPER").unwrap();
+  let torder = HashMap::from([(cell, vec![cell_type])]);
+  let mut module = HardwareModule::new(CELL_WRAPPER_NETLIST.clone(), Some(cell), torder).unwrap();
 
   for (a, b, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
@@ -106,7 +111,10 @@ fn test_module_binary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8); 4])
     (1, 1, 1, 0),
 ])]
 fn test_module_ternary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8); 8]) {
-  let mut module = HardwareModule::new(cell, &CELL_WRAPPER_NETLIST).unwrap();
+  let cell_type = cell.strip_suffix("_WRAPPER").unwrap();
+  let torder = HashMap::from([(cell, vec![cell_type])]);
+  let mut module = HardwareModule::new(CELL_WRAPPER_NETLIST.clone(), Some(cell), torder).unwrap();
+
   for (a, b, c, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
     module.set_port("B", BitVec::from_int(b, None)).unwrap();
@@ -116,6 +124,7 @@ fn test_module_ternary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8)
     assert_eq!(actual, expected, "inputs: `{a}`, `{b}`, `{c}`");
   }
 }
+
 #[rstest]
 #[case::mux2("$_MUX__WRAPPER", [
     (0, 0, 0, 0),
@@ -138,7 +147,10 @@ fn test_module_ternary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8)
     (1, 1, 1, 0),
 ])]
 fn test_module_mux_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8); 8]) {
-  let mut module = HardwareModule::new(cell, &CELL_WRAPPER_NETLIST).unwrap();
+  let cell_type = cell.strip_suffix("_WRAPPER").unwrap();
+  let torder = HashMap::from([(cell, vec![cell_type])]);
+  let mut module = HardwareModule::new(CELL_WRAPPER_NETLIST.clone(), Some(cell), torder).unwrap();
+
   for (a, b, s, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
     module.set_port("B", BitVec::from_int(b, None)).unwrap();

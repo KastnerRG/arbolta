@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
@@ -106,7 +107,11 @@ class HardwarePorts:
 
 class HardwareDesign:
     def __init__(  # TODO: de-duplicate defaults
-        self, top_module: str, netlist_path: str, config: dict[str, PortConfig]
+        self,
+        netlist_path: str | Path,
+        torder_path: str | Path,
+        config: dict[str, PortConfig],
+        top_module: Optional[str] = None,
     ):
         """
         Parameters
@@ -118,8 +123,7 @@ class HardwareDesign:
         config : dict[str, PortConfig]
             Configuration for design ports.
         """
-        self.top_module = top_module
-        self.design = Design(top_module, netlist_path)
+        self.design = Design(netlist_path, top_module, torder_path)
         self.ports = HardwarePorts(config, self.design)
 
     def reset(self):

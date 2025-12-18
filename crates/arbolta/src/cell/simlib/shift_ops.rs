@@ -1,11 +1,10 @@
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 
 // define_arithmetic_cell!(Shl, <<);
-#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
 pub struct Shl {
   signed: bool,
   a_nets: Box<[usize]>,
@@ -44,13 +43,13 @@ impl CellFn for Shl {
       )
     };
 
-    copy_bits(signals, &self.y_nets, y);
+    copy_bits(signals, &self.y_nets, &y);
   }
 
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
 pub struct Shr {
   signed: bool,
   a_nets: Box<[usize]>,
@@ -89,7 +88,7 @@ impl CellFn for Shr {
       )
     };
 
-    copy_bits(signals, &self.y_nets, y);
+    copy_bits(signals, &self.y_nets, &y);
   }
 
   fn reset(&mut self) {}

@@ -1,6 +1,5 @@
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 

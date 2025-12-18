@@ -1,6 +1,5 @@
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 use std::ops::Rem;
@@ -14,7 +13,7 @@ define_arithmetic_cell!(Le, &lt);
 define_arithmetic_cell!(Gt, &gt);
 define_arithmetic_cell!(Ge, &ge);
 
-#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
 pub struct Neg {
   signed: bool,
   a_nets: Box<[usize]>,
@@ -43,7 +42,7 @@ impl CellFn for Neg {
       }
     };
 
-    copy_bits(signals, &self.y_nets, y);
+    copy_bits(signals, &self.y_nets, &y);
   }
 
   fn reset(&mut self) {}
@@ -52,7 +51,7 @@ impl CellFn for Neg {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::cell::test_macros::*;
+  use crate::cell::test_helpers::*;
   use rstest::rstest;
 
   #[rstest]
@@ -78,7 +77,7 @@ mod tests {
   #[case(true, "1", "1", "111111111110")] // -1 + -1 = -2
   #[case(true, "01", "1", "000000000000")] // 1 + -1 = 0
   fn add(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
-    run_binary_cell_case!(Add, signed, a, b, expected);
+    run_binary_cell_case_signed!(Add, signed, a, b, expected);
   }
 
   #[rstest]
@@ -101,7 +100,7 @@ mod tests {
   // 37738 + 4365 = 99938
   #[case::unsigned_overflow(false, "1001001101101010", "0001000100001101", "00011000011001100010")]
   fn mul(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
-    run_binary_cell_case!(Mul, signed, a, b, expected);
+    run_binary_cell_case_signed!(Mul, signed, a, b, expected);
   }
 
   #[rstest]
@@ -119,7 +118,7 @@ mod tests {
   #[case::unsigned_normal(false, "1001001101101010", "0001000100001101", "0")]
   #[case::signed_normal(true, "1001001101101010", "0001000100001101", "1")]
   fn le(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
-    run_binary_cell_case!(Le, signed, a, b, expected);
+    run_binary_cell_case_signed!(Le, signed, a, b, expected);
   }
 
   #[rstest]

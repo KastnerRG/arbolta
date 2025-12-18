@@ -2,11 +2,10 @@ use std::ops::{BitAnd, BitOr, BitXor};
 
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
 pub struct Not {
   signed: bool,
   a_nets: Box<[usize]>,
@@ -35,7 +34,7 @@ define_arithmetic_cell!(ProcXor, bitxor);
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::cell::test_macros::*;
+  use crate::cell::test_helpers::*;
   use rstest::rstest;
 
   #[rstest]
@@ -65,7 +64,7 @@ mod tests {
   #[case(false, "1111", "1111", "1111")]
   #[case(false, "0000", "1111", "0000")]
   fn and(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
-    run_binary_cell_case!(ProcAnd, signed, a, b, expected);
+    run_binary_cell_case_signed!(ProcAnd, signed, a, b, expected);
   }
 
   #[rstest]

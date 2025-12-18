@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::Result;
-use bincode::{Decode, Encode};
 use core::fmt;
 use derive_more::{BitAnd, BitOr, BitXor, Debug, IntoIterator, Not};
 use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingSub};
@@ -26,8 +25,6 @@ use thiserror::Error;
   derive_more::Into,
   Serialize,
   Default,
-  Encode,
-  Decode,
   BitAnd,
   BitOr,
   BitXor,
@@ -165,6 +162,14 @@ impl FromIterator<bool> for BitVec {
 }
 
 impl BitVec {
+  pub fn len(&self) -> usize {
+    self.bits.len()
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.bits.is_empty()
+  }
+
   /// Create from int.
   ///
   /// # Arguments

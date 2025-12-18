@@ -1,29 +1,29 @@
 `include "/opt/oss-cad-suite/share/yosys/simlib.v"
 
-module not_wrapper (
-    A,
-    Y
-);
+// module not_wrapper (
+//     A,
+//     Y
+// );
 
-  parameter A_SIGNED = 0;
-  parameter A_WIDTH = 0;
-  parameter Y_WIDTH = 0;
+//   parameter A_SIGNED = 0;
+//   parameter A_WIDTH = 0;
+//   parameter Y_WIDTH = 0;
 
-  input [A_WIDTH-1:0] A;
-  output [Y_WIDTH-1:0] Y;
+//   input [A_WIDTH-1:0] A;
+//   output [Y_WIDTH-1:0] Y;
 
-  \$not #(
-      .A_SIGNED(A_SIGNED),
-      .A_WIDTH (A_WIDTH),
-      .Y_WIDTH (Y_WIDTH)
-  ) _TECHMAP_REPLACE_ (
-      .A(A),
-      .Y(Y)
-  );
+//   \$not #(
+//       .A_SIGNED(A_SIGNED),
+//       .A_WIDTH (A_WIDTH),
+//       .Y_WIDTH (Y_WIDTH)
+//   ) _TECHMAP_REPLACE_ (
+//       .A(A),
+//       .Y(Y)
+//   );
 
-endmodule
+// endmodule
 
-module add_wrapper (
+module \$add_wrapper (
     A,
     B,
     Y

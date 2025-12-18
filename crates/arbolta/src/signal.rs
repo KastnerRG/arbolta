@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 use crate::bit::Bit;
-use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// Connection between cells/modules and related statistics.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default, Encode, Decode)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
 pub struct Signals {
   // Total number of nets
   pub size: usize,

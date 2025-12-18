@@ -1,6 +1,5 @@
 use super::CellFn;
 use crate::{bit::Bit, signal::Signals};
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +11,7 @@ macro_rules! reduce_nets {
   };
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
 pub struct ReduceAnd {
   a_nets: Box<[usize]>,
   y_nets: Box<[usize]>,
@@ -30,10 +29,10 @@ impl CellFn for ReduceAnd {
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
 pub struct ReduceOr {
-  a_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  pub a_nets: Box<[usize]>,
+  pub y_nets: Box<[usize]>,
 }
 
 impl CellFn for ReduceOr {
@@ -48,11 +47,11 @@ impl CellFn for ReduceOr {
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
 pub struct LogicAnd {
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  pub a_nets: Box<[usize]>,
+  pub b_nets: Box<[usize]>,
+  pub y_nets: Box<[usize]>,
 }
 
 impl CellFn for LogicAnd {
@@ -66,10 +65,10 @@ impl CellFn for LogicAnd {
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
 pub struct LogicNot {
-  a_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  pub a_nets: Box<[usize]>,
+  pub y_nets: Box<[usize]>,
 }
 
 impl CellFn for LogicNot {
@@ -82,7 +81,7 @@ impl CellFn for LogicNot {
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogicOr {
   a_nets: Box<[usize]>,
   b_nets: Box<[usize]>,
@@ -104,7 +103,7 @@ impl CellFn for LogicOr {
 mod tests {
   use super::*;
   use crate::bit::BitVec;
-  use crate::cell::test_macros::*;
+  use crate::cell::test_helpers::*;
   use rstest::rstest;
 
   #[rstest]
@@ -124,13 +123,29 @@ mod tests {
   }
 
   #[rstest]
-  fn logic_and() {
-    println!("TODO")
+  #[case("0", "0", "0")]
+  #[case("0", "1", "0")]
+  #[case("1", "0", "0")]
+  #[case("1", "1", "1")]
+  #[case("00000000", "0000000", "0000")]
+  #[case("10000000", "0000001", "0001")]
+  #[case("1", "0000001", "01")]
+  #[case("1111111", "01", "01")]
+  #[case("1010100", "0000", "00000")]
+  fn logic_and(#[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
+    run_binary_cell_case!(LogicAnd, a, b, expected);
   }
 
   #[rstest]
-  fn logic_not() {
-    println!("TODO")
+  #[case("0", "1")]
+  #[case("1", "0")]
+  #[case("00000000", "0000001")]
+  #[case("10000000", "0000000")]
+  #[case("1", "0000000")]
+  #[case("1111111", "00")]
+  #[case("1010100", "00")]
+  fn logic_not(#[case] a: BitVec, #[case] expected: BitVec) {
+    run_unary_cell_case!(LogicNot, a, expected);
   }
 
   #[rstest]

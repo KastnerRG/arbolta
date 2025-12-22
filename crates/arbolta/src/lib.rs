@@ -3,8 +3,6 @@
 
 pub mod bit;
 pub mod cell;
-pub mod graph;
-pub mod graph3;
 pub mod hardware_module;
 pub mod netlist_wrapper;
 pub mod port;

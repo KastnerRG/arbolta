@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::Result;
-use core::fmt;
 use derive_more::{BitAnd, BitOr, BitXor, Debug, IntoIterator, Not};
 use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingSub};
 use serde::{Deserialize, Serialize};
 use std::{
   convert::{From, Into},
+  fmt,
   str::FromStr,
 };
 use thiserror::Error;
@@ -33,8 +33,11 @@ use thiserror::Error;
 pub struct Bit(#[debug("{}", if *_0 {"1"} else {"0"})] pub bool);
 
 #[derive(Debug, PartialEq, Eq, Error)]
-#[error("Couldn't convert `{0}`")]
-pub struct ParseBitError(char);
+#[error("Couldn't convert `{0}` to a Bit, must be 0 or 1")]
+pub enum ParseBitError {
+  Char(char),
+  Int(String), // Easier than using generics
+}
 
 impl Bit {
   pub const ZERO: Bit = Bit(false);
@@ -46,6 +49,16 @@ impl Bit {
       Self(true) => T::one(),
     }
   }
+
+  pub fn from_int<T: PrimInt + fmt::Display>(val: T) -> Result<Self, ParseBitError> {
+    if val == T::zero() {
+      Ok(Self::ZERO)
+    } else if val == T::one() {
+      Ok(Self::ONE)
+    } else {
+      Err(ParseBitError::Int(format!("{val}")))
+    }
+  }
 }
 
 impl TryFrom<char> for Bit {
@@ -54,7 +67,7 @@ impl TryFrom<char> for Bit {
     match val {
       '0' => Ok(Bit::ZERO),
       '1' => Ok(Bit::ONE),
-      _ => Err(ParseBitError(val)),
+      _ => Err(ParseBitError::Char(val)),
     }
   }
 }

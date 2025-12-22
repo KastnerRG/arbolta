@@ -26,8 +26,6 @@ pub struct HardwareModule {
 // TODO: Refactor these
 #[derive(Debug, Error)]
 pub enum ModuleError {
-  #[error("Module is not flattened or empty")]
-  UnFlattened,
   #[error("Missing top module")]
   TopModule,
   #[error("Cell `{0}` doesn't exist")]
@@ -36,9 +34,9 @@ pub enum ModuleError {
   MissingModule,
   #[error("Module `{0}` missing from topological order")]
   TopoOrder(String),
-  #[error("Cell error `{0}`")]
+  #[error(transparent)]
   Cell(#[from] CellError),
-  #[error("Port error `{0}`")]
+  #[error(transparent)]
   Port(#[from] PortError),
   #[error("No reset configured")]
   MissingReset,
@@ -50,8 +48,10 @@ pub enum ModuleError {
   MissingNet(usize),
   #[error("Port `{0}` doesn't exist")]
   MissingPort(String),
-  #[error("Submodule `{0}` doesn't exist")]
-  MissingSubmodule(String),
+  #[error(transparent)]
+  Netlist(#[from] serde_json::Error),
+  #[error("Signal cannot be configured as both a reset and clock")]
+  DoubleAssign,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -133,6 +133,10 @@ impl HardwareModule {
   pub fn set_clock(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
     if net >= self.signals.size {
       Err(ModuleError::MissingNet(net))
+    } else if let Some((reset_net, _)) = self.reset_net
+      && reset_net == net
+    {
+      Err(ModuleError::DoubleAssign)
     } else {
       self.clock_net = Some((net, polarity));
       Ok(())
@@ -142,6 +146,10 @@ impl HardwareModule {
   pub fn set_reset(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
     if net >= self.signals.size {
       Err(ModuleError::MissingNet(net))
+    } else if let Some((clock_net, _)) = self.clock_net
+      && clock_net == net
+    {
+      Err(ModuleError::DoubleAssign)
     } else {
       self.reset_net = Some((net, polarity));
       Ok(())

@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-use arbol::bit::BitVec;
+use arbolta::bit::BitVec;
 use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingSub};
 use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;

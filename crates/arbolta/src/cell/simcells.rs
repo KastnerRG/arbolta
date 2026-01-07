@@ -149,6 +149,12 @@ create_cell!(
   |a1: Bit, a2: Bit, b: Bit| { (!a1 & !b) | (!a2 & !b) }
 );
 create_cell!(
+  "$_OA211_",
+  OA211 { a1, a2, b, c },
+  y,
+  |a1: Bit, a2: Bit, b: Bit, c: Bit| { (a1 & b & c) | (a2 & b & c) }
+);
+create_cell!(
   "$_AOI3_",
   AndOrInvert { a, b, c },
   y,

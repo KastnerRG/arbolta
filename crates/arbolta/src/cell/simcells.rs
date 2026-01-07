@@ -92,8 +92,15 @@ create_cell!("$_BUF_", Buffer { a }, y, |a: Bit| a);
 create_cell!("$_NOT_", Inverter { a }, y, |a: Bit| !a);
 create_cell!("$_AND_", And { a, b }, y, |a: Bit, b: Bit| a & b);
 create_cell!("$_AND3_", And3 { a, b, c }, y, |a, b, c| a & b & c);
+create_cell!("$_AND4_", And4 { a, b, c, d }, y, |a, b, c, d| a
+  & b
+  & c
+  & d);
 create_cell!("$_NAND_", Nand { a, b }, y, |a: Bit, b: Bit| !(a & b));
 create_cell!("$_OR_", Or { a, b }, y, |a: Bit, b: Bit| a | b);
+create_cell!("$_OR3_", Or3 { a, b, c }, y, |a: Bit, b: Bit, c: Bit| a
+  | b
+  | c);
 create_cell!(
   "$_OR4_",
   Or4 { a, b, c, d },
@@ -112,6 +119,12 @@ create_cell!(
   |a1: Bit, a2: Bit, b: Bit| (a1 & a2) | b
 );
 create_cell!(
+  "$_ANDOR211_",
+  AndOr211 { a1, a2, b, c },
+  y,
+  |a1: Bit, a2: Bit, b: Bit, c: Bit| (a1 & a2) | b | c
+);
+create_cell!(
   "$_ANDOR32_",
   AndOr32 { a1, a2, a3, b1, b2 },
   y,
@@ -122,6 +135,12 @@ create_cell!(
   AndOrReduce { a, b, c },
   y,
   |a: Bit, b: Bit, c: Bit| (a & c) | (b & c)
+);
+create_cell!(
+  "$_OAI21_",
+  OrAnd21 { a1, a2, b },
+  y,
+  |a1: Bit, a2: Bit, b: Bit| (!a1 & !a2) | !b
 );
 create_cell!(
   "$_AOI3_",

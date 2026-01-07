@@ -52,9 +52,13 @@ pub enum Cell {
   FullAdderInv,
   AndOrReduce,
   DffInv,
+  Or3,
   Or4,
+  And4,
   AndOr21,
+  AndOr211,
   AndOr32,
+  OrAnd21,
   // Sim Cells
   Buffer,
   Inverter,

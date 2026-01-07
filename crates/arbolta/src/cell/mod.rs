@@ -71,6 +71,7 @@ pub enum Cell {
   OAI22,
   Or5,
   And5,
+  Nand3,
   // Sim Cells
   Buffer,
   Inverter,

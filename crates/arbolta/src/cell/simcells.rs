@@ -102,6 +102,12 @@ create_cell!("$_AND5_", And5 { a, b, c, d, e }, y, |a, b, c, d, e| a
   & d
   & e);
 create_cell!("$_NAND_", Nand { a, b }, y, |a: Bit, b: Bit| !(a & b));
+create_cell!(
+  "$_NAND3_",
+  Nand3 { a, b, c },
+  y,
+  |a: Bit, b: Bit, c: Bit| !(a & b & c)
+);
 create_cell!("$_OR_", Or { a, b }, y, |a: Bit, b: Bit| a | b);
 create_cell!("$_OR3_", Or3 { a, b, c }, y, |a: Bit, b: Bit, c: Bit| a
   | b

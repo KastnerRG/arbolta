@@ -1,9 +1,8 @@
 use crate::{
-  cell::{Cell, create_cell},
+  cell::{Cell, CellMapping, create_cell},
   hardware_module::ModuleError,
   port::{Port, PortDirection, parse_bit},
-  yosys,
-  yosys::{RTLID, TopoOrder},
+  yosys::{self, Netlist, RTLID, TopoOrder},
 };
 use indexmap::{IndexSet, indexmap};
 use petgraph::prelude::*;
@@ -13,7 +12,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct NetlistWrapper {
   pub top_module: String,
-  netlist: yosys::Netlist,
+  netlist: Netlist,
   pub cells: Vec<RTLID>, // Should be in topological order
   pub modules: HashSet<Vec<String>>,
   pub nets: HashMap<RTLID, Box<[usize]>>,
@@ -22,9 +21,10 @@ pub struct NetlistWrapper {
 
 impl NetlistWrapper {
   pub fn new(
-    netlist: yosys::Netlist,
+    netlist: Netlist,
     top_module: Option<&str>,
     torder: TopoOrder,
+    use_slash_hierarchy: bool,
   ) -> Result<Self, ModuleError> {
     let mut netlist = netlist;
 
@@ -47,8 +47,8 @@ impl NetlistWrapper {
         .unwrap_or(usize::MAX)
     });
 
-    let (cells, cell_modules) = parse_cells(module)?;
-    let nets = parse_nets(module)?;
+    let (cells, cell_modules) = parse_cells(module, use_slash_hierarchy)?;
+    let nets = parse_nets(module, use_slash_hierarchy)?;
     let names_to_nets = HashMap::from_iter(nets.iter().map(|(id, n)| (id.to_string(), n.clone())));
 
     // Add modules only seen in nets (no synthesized cells)
@@ -99,7 +99,8 @@ impl NetlistWrapper {
     module.cells.get(&id.to_string())
   }
 
-  fn build_cell(&self, cell: &RTLID) -> Result<Cell, ModuleError> {
+  fn build_cell(&self, cell: &RTLID, mapping: Option<&CellMapping>) -> Result<Cell, ModuleError> {
+    println!("{cell:?}");
     let synth_cell = self
       .find_cell(cell)
       .ok_or(ModuleError::MissingCell(cell.to_string()))?;
@@ -125,15 +126,16 @@ impl NetlistWrapper {
       &synth_cell.cell_type,
       &connections,
       &parameters,
+      mapping,
     )?)
   }
 
-  pub fn build_cells(&self) -> Result<Vec<Cell>, ModuleError> {
+  pub fn build_cells(&self, mapping: Option<&CellMapping>) -> Result<Vec<Cell>, ModuleError> {
     let cells = self
       .cells
       .iter()
       .rev()
-      .map(|c| Self::build_cell(self, c))
+      .map(|c| Self::build_cell(self, c, mapping))
       .collect::<Result<Vec<Cell>, _>>()?;
     Ok(cells)
   }
@@ -216,7 +218,10 @@ impl NetlistWrapper {
 pub type NetlistGraph = DiGraph<RTLID, usize>;
 
 /// Returns (cells, modules)
-fn parse_cells(module: &mut yosys::Module) -> Result<(Vec<RTLID>, Vec<Vec<String>>), ModuleError> {
+fn parse_cells(
+  module: &mut yosys::Module,
+  use_slash_hierarchy: bool,
+) -> Result<(Vec<RTLID>, Vec<Vec<String>>), ModuleError> {
   let mut scope_cells = vec![];
   let mut primitive_cells = vec![];
 
@@ -253,6 +258,16 @@ fn parse_cells(module: &mut yosys::Module) -> Result<(Vec<RTLID>, Vec<Vec<String
       && let Some(scopename) = scopename.to_string_if_string()
     {
       RTLID::new(&[scopename], &cell_name.as_str())
+    } else if use_slash_hierarchy {
+      let split_name: Vec<&str> = cell_name.split("/").collect();
+      if let Some((name, parents)) = split_name.split_last() {
+        // Add new module
+        modules.push(parents.iter().map(|s| s.to_string()).collect());
+
+        RTLID::new(parents, name)
+      } else {
+        RTLID::new(&[], cell_name)
+      }
     } else {
       RTLID::new(&[], cell_name)
     };
@@ -266,7 +281,10 @@ fn parse_cells(module: &mut yosys::Module) -> Result<(Vec<RTLID>, Vec<Vec<String
   Ok((cells, modules))
 }
 
-fn parse_nets(module: &mut yosys::Module) -> Result<HashMap<RTLID, Box<[usize]>>, ModuleError> {
+fn parse_nets(
+  module: &mut yosys::Module,
+  use_slash_hierarchy: bool,
+) -> Result<HashMap<RTLID, Box<[usize]>>, ModuleError> {
   let mut all_nets = HashMap::new();
 
   let mut new_nets = indexmap! {};
@@ -281,6 +299,13 @@ fn parse_nets(module: &mut yosys::Module) -> Result<HashMap<RTLID, Box<[usize]>>
       let hdlname_split: Vec<&str> = hdlname.split(" ").collect();
       let (name, parents) = hdlname_split.split_last().unwrap();
       RTLID::new(parents, name)
+    } else if use_slash_hierarchy {
+      let split_name: Vec<&str> = net_name.split("/").collect();
+      if let Some((name, parents)) = split_name.split_last() {
+        RTLID::new(parents, name)
+      } else {
+        RTLID::new(&[], net_name)
+      }
     } else {
       RTLID::new(&[], net_name)
     };
@@ -301,7 +326,7 @@ fn parse_nets(module: &mut yosys::Module) -> Result<HashMap<RTLID, Box<[usize]>>
   Ok(all_nets)
 }
 
-fn find_top_module_name(netlist: &yosys::Netlist) -> Option<&str> {
+fn find_top_module_name(netlist: &Netlist) -> Option<&str> {
   for (module_name, module_info) in &netlist.modules {
     if let Some(top_val) = module_info.attributes.get("top")
       && let Some(top) = top_val.to_number()

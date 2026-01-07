@@ -7,6 +7,7 @@ use crate::conversion::{
 use crate::ports::{PortConfig, Ports};
 use arbolta::bit::Bit;
 use arbolta::{
+  cell::CellMapping,
   hardware_module::HardwareModule,
   port::PortDirection,
   yosys::{Netlist, parse_torder},
@@ -30,6 +31,8 @@ impl HardwareDesign {
     netlist_path: PathBuf,
     top_module: Option<&str>,
     torder_path: PathBuf,
+    use_slash_hierarchy: bool,
+    cell_mapping: Option<&CellMapping>,
   ) -> anyhow::Result<Self> {
     // Read raw JSON netlist
     let raw_netlist = std::fs::read(netlist_path)?;
@@ -39,7 +42,13 @@ impl HardwareDesign {
     let raw_torder = std::fs::read_to_string(torder_path)?;
     let torder = parse_torder(&raw_torder);
 
-    let module = HardwareModule::new(netlist, top_module, torder)?;
+    let module = HardwareModule::new(
+      netlist,
+      top_module,
+      torder,
+      use_slash_hierarchy,
+      cell_mapping,
+    )?;
 
     Ok(Self { module })
   }
@@ -127,15 +136,26 @@ impl HardwareDesign {
 #[pymethods]
 impl HardwareDesign {
   #[new]
-  #[pyo3(signature = (netlist_path, torder_path, config, top_module=None))]
+  #[pyo3(signature = (netlist_path, torder_path, config, use_slash_hierarchy=false, top_module=None, cell_mapping=None))]
   pub fn new(
     py: Python<'_>,
     netlist_path: PathBuf,
     torder_path: PathBuf,
     config: HashMap<String, PyRef<PortConfig>>,
+    use_slash_hierarchy: bool,
     top_module: Option<&str>,
+    cell_mapping: Option<CellMapping>,
   ) -> anyhow::Result<Py<Self>> {
-    let new_module = Py::new(py, Self::new_base(netlist_path, top_module, torder_path)?)?;
+    let new_module = Py::new(
+      py,
+      Self::new_base(
+        netlist_path,
+        top_module,
+        torder_path,
+        use_slash_hierarchy,
+        cell_mapping.as_ref(),
+      )?,
+    )?;
 
     // Add custom members (can't make them static for serialization)
     let temp_binding = new_module.getattr(py, "__dict__")?;

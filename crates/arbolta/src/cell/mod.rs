@@ -1,5 +1,6 @@
 mod simcells;
 mod simlib;
+// mod temp;
 mod test_helpers;
 
 // Re-export
@@ -44,6 +45,13 @@ pub static CELL_DISPATCH: Lazy<HashMap<&'static str, CellCtor>> = Lazy::new(|| {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// Proxy for a standard-cell and basic unit of 'compute'.
 pub enum Cell {
+  // ASAP7
+  HalfAdder,
+  HalfAdderInv,
+  FullAdder,
+  FullAdderInv,
+  AndOrReduce,
+  DffInv,
   // Sim Cells
   Buffer,
   Inverter,
@@ -57,6 +65,8 @@ pub enum Cell {
   OrNot,
   Mux2,
   NMux2,
+  And3,
+  AndOr,
   AndOrInvert,
   OrAndInvert,
   Dff,
@@ -101,14 +111,38 @@ pub enum CellError {
   Direction(String),
 }
 
+pub type CellMapping = HashMap<String, (String, Option<HashMap<String, String>>)>;
+
 pub fn create_cell(
   cell_type: &str,
   connections: &BTreeMap<&str, Box<[usize]>>,
   parameters: &BTreeMap<&str, usize>,
+  mapping: Option<&CellMapping>,
 ) -> Result<Cell, CellError> {
+  let (cell_type, mut connections) = if let Some(mapping) = mapping
+    && let Some((mapped_cell_type, mapped_connections)) = mapping.get(cell_type)
+  {
+    let connections = match mapped_connections {
+      Some(mapped_connections) => connections
+        .iter()
+        .map(|(&port_name, nets)| (mapped_connections[port_name].as_str(), nets.clone()))
+        .collect(),
+      None => connections.clone(),
+    };
+
+    (mapped_cell_type.as_str(), connections)
+  } else {
+    (cell_type, connections.clone())
+  };
+
   let ctor = CELL_DISPATCH
     .get(cell_type)
     .ok_or_else(|| CellError::Unsupported(cell_type.to_string()))?;
 
-  Ok(ctor(connections, parameters))
+  // Special case, buffer with no output
+  if cell_type == "$_BUF_" && !connections.contains_key("Y") {
+    connections.insert("Y", Box::from([0]));
+  }
+
+  Ok(ctor(&connections, parameters))
 }

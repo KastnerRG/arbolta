@@ -60,8 +60,12 @@ class HardwareDesign:
     :type torder_path: str | Path | PathLike
     :param config: Configuration for design ports
     :type config: dict[str, PortConfig]
-    :param top_module: Name of top module
+    :param use_slash_hierarchy: Use slash hierarchy, defaults to False
+    :type use_slash_hierarchy: bool
+    :param top_module: Name of top module, defaults to None (find automatically)
     :type top_module: str, optional
+    :param cell_mapping: Define additional cell types
+    :type cell_mapping: dict[str, tuple[str, Optional[dict[str, str]]]], optional
 
     :var ports: Access to simulated module ports
     :vartype ports: Ports
@@ -74,7 +78,9 @@ class HardwareDesign:
         netlist_path: str | Path | PathLike,
         torder_path: str | Path | PathLike,
         config: dict[str, PortConfig],
+        use_slash_hierarchy: bool = False,
         top_module: Optional[str] = None,
+        cell_mapping: Optional[dict[str, tuple[str, Optional[dict[str, str]]]]] = None,
     ) -> None: ...
     def reset(self) -> None:
         """

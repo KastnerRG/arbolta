@@ -108,6 +108,12 @@ create_cell!(
   |a: Bit, b: Bit, c: Bit, d: Bit| a | b | c | d
 );
 create_cell!("$_NOR_", Nor { a, b }, y, |a: Bit, b: Bit| !(a | b));
+create_cell!(
+  "$_NOR3_",
+  Nor3 { a, b, c },
+  y,
+  |a: Bit, b: Bit, c: Bit| !(a | b | c)
+);
 create_cell!("$_XOR_", Xor { a, b }, y, |a: Bit, b: Bit| a ^ b);
 create_cell!("$_XNOR_", Xnor { a, b }, y, |a: Bit, b: Bit| !(a ^ b));
 create_cell!("$_ANDNOT_", AndNot { a, b }, y, |a: Bit, b: Bit| a & !b);
@@ -147,6 +153,12 @@ create_cell!(
   AOI21 { a1, a2, b },
   y,
   |a1: Bit, a2: Bit, b: Bit| { (!a1 & !b) | (!a2 & !b) }
+);
+create_cell!(
+  "$_OA21_",
+  OA21 { a1, a2, b },
+  y,
+  |a1: Bit, a2: Bit, b: Bit| { (a1 & b) | (a2 & b) }
 );
 create_cell!(
   "$_OA211_",

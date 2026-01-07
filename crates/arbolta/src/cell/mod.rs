@@ -61,6 +61,8 @@ pub enum Cell {
   OrAnd21,
   AOI21,
   OA211,
+  Nor3,
+  OA21,
   // Sim Cells
   Buffer,
   Inverter,

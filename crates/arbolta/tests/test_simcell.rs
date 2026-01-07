@@ -127,7 +127,7 @@ fn test_cell_binary(#[case] mut cell: Box<dyn CellFn>, #[case] cases: [(u8, u8, 
     (1, 1, 0, 0),
     (1, 1, 1, 1),
 ])]
-#[case::andor(Box::new(AndOr::new(0, 1, 2, 3)), [ // (A, B, C, Y)
+#[case::andor(Box::new(AndOr21::new(0, 1, 2, 3)), [ // (A, B, C, Y)
     (0, 0, 0, 0),
     (0, 0, 1, 1),
     (0, 1, 0, 0),

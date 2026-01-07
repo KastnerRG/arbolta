@@ -94,16 +94,28 @@ create_cell!("$_AND_", And { a, b }, y, |a: Bit, b: Bit| a & b);
 create_cell!("$_AND3_", And3 { a, b, c }, y, |a, b, c| a & b & c);
 create_cell!("$_NAND_", Nand { a, b }, y, |a: Bit, b: Bit| !(a & b));
 create_cell!("$_OR_", Or { a, b }, y, |a: Bit, b: Bit| a | b);
+create_cell!(
+  "$_OR4_",
+  Or4 { a, b, c, d },
+  y,
+  |a: Bit, b: Bit, c: Bit, d: Bit| a | b | c | d
+);
 create_cell!("$_NOR_", Nor { a, b }, y, |a: Bit, b: Bit| !(a | b));
 create_cell!("$_XOR_", Xor { a, b }, y, |a: Bit, b: Bit| a ^ b);
 create_cell!("$_XNOR_", Xnor { a, b }, y, |a: Bit, b: Bit| !(a ^ b));
 create_cell!("$_ANDNOT_", AndNot { a, b }, y, |a: Bit, b: Bit| a & !b);
 create_cell!("$_ORNOT_", OrNot { a, b }, y, |a: Bit, b: Bit| a | !b);
 create_cell!(
-  "$_ANDOR_",
-  AndOr { a, b, c },
+  "$_ANDOR21_",
+  AndOr21 { a1, a2, b },
   y,
-  |a: Bit, b: Bit, c: Bit| (a & b) | c
+  |a1: Bit, a2: Bit, b: Bit| (a1 & a2) | b
+);
+create_cell!(
+  "$_ANDOR32_",
+  AndOr32 { a1, a2, a3, b1, b2 },
+  y,
+  |a1, a2, a3, b1, b2| (a1 & a2 & a3) | (b1 & b2)
 );
 create_cell!(
   "$_ANDORREDUCE_",

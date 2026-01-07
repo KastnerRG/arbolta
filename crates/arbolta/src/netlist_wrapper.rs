@@ -100,7 +100,6 @@ impl NetlistWrapper {
   }
 
   fn build_cell(&self, cell: &RTLID, mapping: Option<&CellMapping>) -> Result<Cell, ModuleError> {
-    println!("{cell:?}");
     let synth_cell = self
       .find_cell(cell)
       .ok_or(ModuleError::MissingCell(cell.to_string()))?;

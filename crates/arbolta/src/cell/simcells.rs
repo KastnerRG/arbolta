@@ -149,16 +149,52 @@ create_cell!(
   |a1: Bit, a2: Bit, b: Bit| (!a1 & !a2) | !b
 );
 create_cell!(
+  "$_OAI22_",
+  OAI22 { a1, a2, b1, b2 },
+  y,
+  |a1: Bit, a2: Bit, b1: Bit, b2: Bit| (!a1 & !a2) | (!b1 & !b2)
+);
+create_cell!(
   "$_AOI21_",
   AOI21 { a1, a2, b },
   y,
   |a1: Bit, a2: Bit, b: Bit| { (!a1 & !b) | (!a2 & !b) }
 );
 create_cell!(
+  "$_AOI211_",
+  AOI211 { a1, a2, b, c },
+  y,
+  |a1: Bit, a2: Bit, b: Bit, c: Bit| { (!a1 & !b & !c) | (!a2 & !b & !c) }
+);
+create_cell!(
+  "$_AO221_",
+  AO221 { a1, a2, b1, b2, c },
+  y,
+  |a1: Bit, a2: Bit, b1: Bit, b2: Bit, c: Bit| { (a1 & a2) | (b1 & b2) | c }
+);
+create_cell!(
+  "$_AO31_",
+  AO31 { a1, a2, a3, b },
+  y,
+  |a1: Bit, a2: Bit, a3: Bit, b: Bit| { (a1 & a2 & a3) | b }
+);
+create_cell!(
   "$_OA21_",
   OA21 { a1, a2, b },
   y,
   |a1: Bit, a2: Bit, b: Bit| { (a1 & b) | (a2 & b) }
+);
+create_cell!(
+  "$_OA31_",
+  OA31 { a1, a2, a3, b1 },
+  y,
+  |a1: Bit, a2: Bit, a3: Bit, b1: Bit| (a1 & b1) | (a2 & b1) | (a3 | b1)
+);
+create_cell!(
+  "$_OA22_",
+  OA22 { a1, a2, b1, b2 },
+  y,
+  |a1: Bit, a2: Bit, b1: Bit, b2: Bit| (a1 & b1) | (a1 & b2) | (a2 | b1) | (a2 | b2)
 );
 create_cell!(
   "$_OA211_",

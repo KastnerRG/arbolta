@@ -3,7 +3,7 @@ use crate::{bit::Bit, cell::CellRegistration, signal::Signals};
 use derive_more::Constructor;
 use paste::paste;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, env};
 
 macro_rules! create_cell {
   // 1-output, no inputs
@@ -25,6 +25,10 @@ macro_rules! create_cell {
     paste! {
       inventory::submit! {CellRegistration::new($rtl_names,
         |connections: &BTreeMap<&str, Box<[usize]>>, _parameters: &BTreeMap<&str, usize>| {
+          if env::var("ARBOLTA_DEBUG").is_ok() {
+            println!("Parsing connections: {:#?}", connections);
+          }
+
           $cell_type::new(
             connections[stringify!([<$out_net:upper>])][0]
           ).into()
@@ -59,11 +63,21 @@ macro_rules! create_cell {
     paste! {
       inventory::submit! {CellRegistration::new($rtl_names,
         |connections: &BTreeMap<&str, Box<[usize]>>, _parameters: &BTreeMap<&str, usize>| {
+          if env::var("ARBOLTA_DEBUG").is_ok() {
+            println!("Parsing connections: {:#?}", connections);
+          }
+
+          // Special case for buffers
+          let output_net = match connections.get(stringify!([<$out_net:upper>])) {
+            Some(nets) => nets[0],
+            None => 0 // Write to zero does nothing
+          };
+
           $cell_type::new(
             $(
               connections[stringify!([<$in_netn:upper>])][0],
             )*
-            connections[stringify!([<$out_net:upper>])][0]
+            output_net
           ).into()
       })}
     }
@@ -102,6 +116,10 @@ macro_rules! create_cell {
     paste! {
       inventory::submit! {CellRegistration::new($rtl_names,
         |connections: &BTreeMap<&str, Box<[usize]>>, _parameters: &BTreeMap<&str, usize>| {
+          if env::var("ARBOLTA_DEBUG").is_ok() {
+            println!("Parsing connections: {:#?}", connections);
+          }
+
           $cell_type::new(
             $(
               connections[stringify!([<$in_netn:upper>])][0],
@@ -234,6 +252,13 @@ impl CellFn for DffReset {
 inventory::submit! {
   CellRegistration::new(&["$_SDFF_PP0_"],
   |connections: &BTreeMap<&str, Box<[usize]>>, _parameters: &BTreeMap<&str, usize>| {
+
+    let output_net = match connections.get("Y") {
+      Some(nets) => nets[0],
+      None => 0
+    };
+
+
     DffReset::new(
       Bit::ONE,
       Bit::ONE,

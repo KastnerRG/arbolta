@@ -10,7 +10,10 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 pub use simcells::*;
 pub use simlib::*;
-use std::collections::{BTreeMap, HashMap};
+use std::{
+  collections::{BTreeMap, HashMap},
+  env,
+};
 use thiserror::Error;
 
 #[enum_dispatch]
@@ -191,6 +194,10 @@ pub fn create_cell(
   parameters: &BTreeMap<&str, usize>,
   mapping: Option<&CellMapping>,
 ) -> Result<Cell, CellError> {
+  if env::var("ARBOLTA_DEBUG").is_ok() {
+    println!("Parsing cell `{cell_type}`")
+  }
+
   let (cell_type, mut connections) = if let Some(mapping) = mapping
     && let Some((mapped_cell_type, mapped_connections)) = mapping.get(cell_type)
   {
@@ -210,11 +217,6 @@ pub fn create_cell(
   let ctor = CELL_DISPATCH
     .get(cell_type)
     .ok_or_else(|| CellError::Unsupported(cell_type.to_string()))?;
-
-  // Special case, buffer with no output
-  if cell_type == "$_BUF_" && !connections.contains_key("Y") {
-    connections.insert("Y", Box::from([0]));
-  }
 
   Ok(ctor(&connections, parameters))
 }

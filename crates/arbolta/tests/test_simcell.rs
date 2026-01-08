@@ -35,49 +35,49 @@ fn test_cell_unary(#[case] mut cell: Box<dyn CellFn>, #[case] cases: [(u8, u8); 
 }
 
 #[rstest]
-#[case::and(Box::new(And::new(0, 1, 2)), [ // (A, B, Y)
+#[case::and(Box::new(And2::new(0, 1, 2)), [ // (A, B, Y)
     (0, 0, 0),
     (0, 1, 0),
     (1, 0, 0),
     (1, 1, 1),
 ])]
-#[case::nand(Box::new(Nand::new(0, 1, 2)), [ // (A, B, Y)
+#[case::nand(Box::new(Nand2::new(0, 1, 2)), [ // (A, B, Y)
     (0, 0, 1),
     (0, 1, 1),
     (1, 0, 1),
     (1, 1, 0),
 ])]
-#[case::or(Box::new(Or::new(0, 1, 2)), [ // (A, B, Y)
+#[case::or(Box::new(Or2::new(0, 1, 2)), [ // (A, B, Y)
     (0, 0, 0),
     (0, 1, 1),
     (1, 0, 1),
     (1, 1, 1),
 ])]
-#[case::nor(Box::new(Nor::new(0, 1, 2)), [ // (A, B, Y)
+#[case::nor(Box::new(Nor2::new(0, 1, 2)), [ // (A, B, Y)
     (0, 0, 1),
     (0, 1, 0),
     (1, 0, 0),
     (1, 1, 0),
 ])]
-#[case::xor(Box::new(Xor::new(0, 1, 2)), [ // (A, B, Y)
+#[case::xor(Box::new(Xor2::new(0, 1, 2)), [ // (A, B, Y)
     (0, 0, 0),
     (0, 1, 1),
     (1, 0, 1),
     (1, 1, 0),
 ])]
-#[case::xnor(Box::new(Xnor::new(0, 1, 2)), [ // (A, B, Y)
+#[case::xnor(Box::new(Xnor2::new(0, 1, 2)), [ // (A, B, Y)
     (0, 0, 1),
     (0, 1, 0),
     (1, 0, 0),
     (1, 1, 1),
 ])]
-#[case::andnot(Box::new(AndNot::new(0, 1, 2)), [ // (A, B, Y)
+#[case::andnot(Box::new(AndNot2::new(0, 1, 2)), [ // (A, B, Y)
     (0, 0, 0),
     (0, 1, 0),
     (1, 0, 1),
     (1, 1, 0),
 ])]
-#[case::ornot(Box::new(OrNot::new(0, 1, 2)), [ // (A, B, Y)
+#[case::ornot(Box::new(OrNot2::new(0, 1, 2)), [ // (A, B, Y)
     (0, 0, 1),
     (0, 1, 0),
     (1, 0, 1),
@@ -117,27 +117,7 @@ fn test_cell_binary(#[case] mut cell: Box<dyn CellFn>, #[case] cases: [(u8, u8, 
     (1, 1, 0, 0),
     (1, 1, 1, 0),
 ])]
-#[case::and3(Box::new(And3::new(0, 1, 2, 3)), [ // (A, B, C, Y)
-    (0, 0, 0, 0),
-    (0, 0, 1, 0),
-    (0, 1, 0, 0),
-    (0, 1, 1, 0),
-    (1, 0, 0, 0),
-    (1, 0, 1, 0),
-    (1, 1, 0, 0),
-    (1, 1, 1, 1),
-])]
-#[case::andor(Box::new(AndOr21::new(0, 1, 2, 3)), [ // (A, B, C, Y)
-    (0, 0, 0, 0),
-    (0, 0, 1, 1),
-    (0, 1, 0, 0),
-    (0, 1, 1, 1),
-    (1, 0, 0, 0),
-    (1, 0, 1, 1),
-    (1, 1, 0, 1),
-    (1, 1, 1, 1),
-])]
-#[case::andorinvert(Box::new(AndOrInvert::new(0, 1, 2, 3)), [ // (A, B, C, Y)
+#[case::andorinvert(Box::new(AndOrInvert3::new(0, 1, 2, 3)), [ // (A, B, C, Y)
     (0, 0, 0, 1),
     (0, 0, 1, 0),
     (0, 1, 0, 1),
@@ -147,17 +127,7 @@ fn test_cell_binary(#[case] mut cell: Box<dyn CellFn>, #[case] cases: [(u8, u8, 
     (1, 1, 0, 0),
     (1, 1, 1, 0),
 ])]
-#[case::andorreduce(Box::new(AndOrReduce::new(0, 1, 2, 3)), [ // (A, B, C, Y)
-    (0, 0, 0, 0),
-    (0, 0, 1, 0),
-    (0, 1, 0, 0),
-    (0, 1, 1, 1),
-    (1, 0, 0, 0),
-    (1, 0, 1, 1),
-    (1, 1, 0, 0),
-    (1, 1, 1, 1),
-])]
-#[case::orandinvert(Box::new(OrAndInvert::new(0, 1, 2, 3)), [ // (A, B, C, Y)
+#[case::orandinvert(Box::new(OrAndInvert3::new(0, 1, 2, 3)), [ // (A, B, C, Y)
     (0, 0, 0, 1),
     (0, 0, 1, 1),
     (0, 1, 0, 1),
@@ -181,13 +151,7 @@ fn test_cell_ternary(#[case] mut cell: Box<dyn CellFn>, #[case] cases: [(u8, u8,
 }
 
 #[rstest]
-#[case::half_adder(Box::new(HalfAdder::new(0, 1, 2, 3)), [ // A, B, SO, CO
-    (0, 0, 0, 0),
-    (0, 1, 1, 0),
-    (1, 0, 1, 0),
-    (1, 1, 0, 1),
-])]
-#[case::half_adder_inv(Box::new(HalfAdderInv::new(0, 1, 2, 3)), [ // A, B, SO, CO
+#[case::half_adder_inv(Box::new(Asap7HalfAdderInv::new(0, 1, 2, 3)), [ // A, B, SO, CO
     (0, 0, 1, 1),
     (0, 1, 0, 1),
     (1, 0, 0, 1),
@@ -210,17 +174,7 @@ fn test_cell_binary_two_output(
 }
 
 #[rstest]
-#[case::full_adder(Box::new(FullAdder::new(0, 1, 2, 3, 4)), [ // A, B, CI, SO, CO
-  (0, 0, 0, 0, 0),
-  (0, 0, 1, 1, 0),
-  (0, 1, 0, 1, 0),
-  (0, 1, 1, 0, 1),
-  (1, 0, 0, 1, 0),
-  (1, 0, 1, 0, 1),
-  (1, 1, 0, 0, 1),
-  (1, 1, 1, 1, 1),
-])]
-#[case::full_adder_inv(Box::new(FullAdderInv::new(0, 1, 2, 3, 4)), [ // A, B, CI, SO, CO
+#[case::full_adder_inv(Box::new(Asap7FullAdderInv::new(0, 1, 2, 3, 4)), [ // A, B, CI, SO, CO
   (0, 0, 0, 1, 1),
   (0, 0, 1, 0, 1),
   (0, 1, 0, 0, 1),

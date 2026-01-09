@@ -483,7 +483,7 @@ create_cell!(
   |a: Bit, b: Bit, c: Bit, d: Bit, e: Bit| a | b | c | d | e
 );
 create_cell!(&["TIEHIx1_ASAP7_75t_R"], Asap7TieHigh, h, || Bit::ONE);
-create_cell!(&["TIELOx1_ASAP7_75t_R"], Asap7TieLow, h, || Bit::ZERO);
+create_cell!(&["TIELOx1_ASAP7_75t_R"], Asap7TieLow, l, || Bit::ZERO);
 create_cell!(
   &[
     "XNOR2x1_ASAP7_75t_R",

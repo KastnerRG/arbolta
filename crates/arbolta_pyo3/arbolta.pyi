@@ -69,9 +69,12 @@ class HardwareDesign:
 
     :var ports: Access to simulated module ports
     :vartype ports: Ports
+    :var modules: List of all submodules in design
+    :vartype modules: list[str]
     """
 
     ports: Ports
+    modules: list[str]
 
     def __init__(
         self,
@@ -116,3 +119,4 @@ class HardwareDesign:
 
     def stick_signal(self, net: int, val: Literal[0, 1]) -> None: ...
     def unstick_signal(self, net: int) -> None: ...
+    def toggle_count(self, category: str = "total") -> dict[str, dict[str, int]]: ...

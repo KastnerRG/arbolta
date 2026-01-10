@@ -5,17 +5,17 @@ use crate::conversion::{
   bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits,
 };
 use crate::ports::{PortConfig, Ports};
-use arbolta::bit::Bit;
 use arbolta::{
+  bit::Bit,
   cell::CellMapping,
-  hardware_module::HardwareModule,
+  hardware_module::{HardwareModule, ToggleCount},
   port::PortDirection,
   yosys::{Netlist, parse_torder},
 };
 use pyo3::{
   exceptions::{PyAttributeError, PyValueError},
   prelude::*,
-  types::PyDict,
+  types::{PyDict, PyList},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
@@ -146,26 +146,37 @@ impl HardwareDesign {
     top_module: Option<&str>,
     cell_mapping: Option<CellMapping>,
   ) -> anyhow::Result<Py<Self>> {
-    let new_module = Py::new(
-      py,
-      Self::new_base(
-        netlist_path,
-        top_module,
-        torder_path,
-        use_slash_hierarchy,
-        cell_mapping.as_ref(),
-      )?,
+    let new_module = Self::new_base(
+      netlist_path,
+      top_module,
+      torder_path,
+      use_slash_hierarchy,
+      cell_mapping.as_ref(),
     )?;
 
+    // Get submodules before binding to Python
+    let submodules = new_module
+      .module
+      .netlist
+      .modules
+      .iter()
+      .map(|p| p.join("."))
+      .collect::<Vec<String>>();
+
+    let py_module = Py::new(py, new_module)?;
+
     // Add custom members (can't make them static for serialization)
-    let temp_binding = new_module.getattr(py, "__dict__")?;
+    let temp_binding = py_module.getattr(py, "__dict__")?;
     let temp_dict = temp_binding.cast_bound::<PyDict>(py).unwrap();
 
     // Add ports field
-    let ports = Py::new(py, Ports::new(py, config, new_module.clone_ref(py))?)?;
+    let ports = Py::new(py, Ports::new(py, config, py_module.clone_ref(py))?)?;
     temp_dict.set_item("ports", ports)?;
 
-    Ok(new_module)
+    // Add modules/submodules field
+    temp_dict.set_item("modules", PyList::new(py, submodules)?)?;
+
+    Ok(py_module)
   }
 
   pub fn reset(&mut self) {
@@ -193,21 +204,36 @@ impl HardwareDesign {
   pub fn unstick_signal(&mut self, net: usize) -> anyhow::Result<()> {
     Ok(self.module.unstick_signal(net)?)
   }
-  // TODO
-
-  pub fn get_module_names(&self) -> Vec<String> {
-    // TODO: How to handle top_module?
-    self
-      .module
-      .netlist
-      .modules
-      .iter()
-      .map(|p| p.join("."))
-      .collect()
-  }
 
   pub fn is_port_input(&self, name: &str) -> anyhow::Result<bool> {
     let direction = self.module.get_port_direction(name)?;
     Ok(direction == PortDirection::Input)
+  }
+
+  #[pyo3(signature = (category="total"))]
+  pub fn toggle_count(&self, category: &str) -> PyResult<HashMap<String, HashMap<String, u64>>> {
+    let category = match category {
+      "falling" => ToggleCount::Falling,
+      "rising" => ToggleCount::Rising,
+      "total" => ToggleCount::Total,
+      _ => {
+        return Err(PyValueError::new_err(format!(
+          "Invalid toggle category `{category}`"
+        )));
+      }
+    };
+
+    let mut toggles = HashMap::<String, HashMap<String, u64>>::new();
+    for (submodule_names, nets_ref) in self.module.get_submodule_toggles_by_net(category) {
+      let name = submodule_names.join(".");
+      let nets = nets_ref
+        .into_iter()
+        .map(|(n, c)| (n.to_string(), c))
+        .collect();
+
+      toggles.insert(name, nets);
+    }
+
+    Ok(toggles)
   }
 }

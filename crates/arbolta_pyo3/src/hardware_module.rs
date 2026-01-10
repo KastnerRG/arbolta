@@ -12,6 +12,7 @@ use arbolta::{
   port::PortDirection,
   yosys::{Netlist, parse_torder},
 };
+use pyo3::types::IntoPyDict;
 use pyo3::{
   exceptions::{PyAttributeError, PyValueError},
   prelude::*,
@@ -210,8 +211,8 @@ impl HardwareDesign {
     Ok(direction == PortDirection::Input)
   }
 
-  #[pyo3(signature = (category="total"))]
-  pub fn toggle_count(&self, category: &str) -> PyResult<HashMap<String, HashMap<String, u64>>> {
+  #[pyo3(signature = (category="total", by_net=true))]
+  pub fn toggle_count(&self, py: Python<'_>, category: &str, by_net: bool) -> PyResult<Py<PyDict>> {
     let category = match category {
       "falling" => ToggleCount::Falling,
       "rising" => ToggleCount::Rising,
@@ -223,17 +224,25 @@ impl HardwareDesign {
       }
     };
 
-    let mut toggles = HashMap::<String, HashMap<String, u64>>::new();
-    for (submodule_names, nets_ref) in self.module.get_submodule_toggles_by_net(category) {
-      let name = submodule_names.join(".");
-      let nets = nets_ref
-        .into_iter()
-        .map(|(n, c)| (n.to_string(), c))
-        .collect();
+    let toggles = PyDict::new(py);
+    if by_net {
+      for (submodule_names, nets_ref) in self.module.get_submodule_toggles_by_net(category) {
+        let name = submodule_names.join(".");
+        let nets: HashMap<String, u64> = nets_ref
+          .into_iter()
+          .map(|(n, c)| (n.to_string(), c))
+          .collect();
 
-      toggles.insert(name, nets);
+        toggles.set_item(name, nets)?;
+      }
+    } else {
+      for (submodule_names, count) in self.module.get_submodule_toggles_total(category) {
+        let name = submodule_names.join(".");
+
+        toggles.set_item(name, count)?;
+      }
     }
 
-    Ok(toggles)
+    Ok(toggles.into())
   }
 }

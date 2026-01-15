@@ -9,7 +9,8 @@ define_arithmetic_cell!(Sub, wrapping_sub);
 define_arithmetic_cell!(Mul, wrapping_mul);
 define_arithmetic_cell!(Div, wrapping_div);
 define_arithmetic_cell!(Modulus, rem);
-define_arithmetic_cell!(Le, &lt);
+define_arithmetic_cell!(Lt, &lt);
+define_arithmetic_cell!(Le, &le);
 define_arithmetic_cell!(Gt, &gt);
 define_arithmetic_cell!(Ge, &ge);
 
@@ -117,8 +118,18 @@ mod tests {
   // 37738 < 4365 = 0
   #[case::unsigned_normal(false, "1001001101101010", "0001000100001101", "0")]
   #[case::signed_normal(true, "1001001101101010", "0001000100001101", "1")]
+  #[case::unsigned_equal(false, "101010", "00101010", "1")]
   fn le(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
     run_binary_cell_case_signed!(Le, signed, a, b, expected);
+  }
+
+  #[rstest]
+  // 37738 < 4365 = 0
+  #[case::unsigned_normal(false, "1001001101101010", "0001000100001101", "0")]
+  #[case::signed_normal(true, "1001001101101010", "0001000100001101", "1")]
+  #[case::unsigned_equal(false, "101010", "00101010", "0")]
+  fn lt(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
+    run_binary_cell_case_signed!(Lt, signed, a, b, expected);
   }
 
   #[rstest]

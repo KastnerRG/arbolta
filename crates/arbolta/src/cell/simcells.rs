@@ -252,13 +252,6 @@ impl CellFn for DffReset {
 inventory::submit! {
   CellRegistration::new(&["$_SDFF_PP0_"],
   |connections: &BTreeMap<&str, Box<[usize]>>, _parameters: &BTreeMap<&str, usize>| {
-
-    let output_net = match connections.get("Y") {
-      Some(nets) => nets[0],
-      None => 0
-    };
-
-
     DffReset::new(
       Bit::ONE,
       Bit::ONE,

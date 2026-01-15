@@ -156,6 +156,7 @@ pub enum Cell {
   Div,
   Modulus,
   Le,
+  Lt,
   Ge,
   Gt,
   Shl,
@@ -167,6 +168,7 @@ pub enum Cell {
   PMux,
   LogicAnd,
   LogicNot,
+  LogicOr,
   ReduceOr,
   ReduceAnd,
   ProcAnd,
@@ -198,7 +200,7 @@ pub fn create_cell(
     println!("Parsing cell `{cell_type}`")
   }
 
-  let (cell_type, mut connections) = if let Some(mapping) = mapping
+  let (cell_type, connections) = if let Some(mapping) = mapping
     && let Some((mapped_cell_type, mapped_connections)) = mapping.get(cell_type)
   {
     let connections = match mapped_connections {

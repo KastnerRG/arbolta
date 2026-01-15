@@ -81,7 +81,7 @@ impl CellFn for LogicNot {
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
 pub struct LogicOr {
   a_nets: Box<[usize]>,
   b_nets: Box<[usize]>,
@@ -149,7 +149,16 @@ mod tests {
   }
 
   #[rstest]
-  fn logic_or() {
-    println!("TODO")
+  #[case("0", "0", "0")]
+  #[case("0", "1", "1")]
+  #[case("1", "0", "1")]
+  #[case("1", "1", "1")]
+  #[case("00000000", "0000000", "0000")]
+  #[case("10000000", "0000001", "0001")]
+  #[case("1", "0000001", "01")]
+  #[case("1111111", "01", "01")]
+  #[case("1010100", "0000", "00001")]
+  fn logic_or(#[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
+    run_binary_cell_case!(LogicOr, a, b, expected);
   }
 }

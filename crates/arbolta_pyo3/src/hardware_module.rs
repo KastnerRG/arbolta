@@ -12,7 +12,6 @@ use arbolta::{
   port::PortDirection,
   yosys::{Netlist, parse_torder},
 };
-use pyo3::types::IntoPyDict;
 use pyo3::{
   exceptions::{PyAttributeError, PyValueError},
   prelude::*,

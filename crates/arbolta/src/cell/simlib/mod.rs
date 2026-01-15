@@ -264,6 +264,16 @@ fn make_le(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&st
   .into()
 }
 
+fn make_lt(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>) -> Cell {
+  Lt::new(
+    (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
 fn make_ge(connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>) -> Cell {
   Ge::new(
     (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
@@ -396,6 +406,18 @@ fn make_logic_not(
   LogicNot::new(connections["A"].clone(), connections["Y"].clone()).into()
 }
 
+fn make_logic_or(
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  _parameters: &BTreeMap<&str, usize>,
+) -> Cell {
+  LogicOr::new(
+    connections["A"].clone(),
+    connections["B"].clone(),
+    connections["Y"].clone(),
+  )
+  .into()
+}
+
 fn make_reduce_or(
   connections: &BTreeMap<&str, Box<[usize]>>,
   _parameters: &BTreeMap<&str, usize>,
@@ -475,6 +497,7 @@ inventory::submit! {CellRegistration::new(&["$mul"], make_mul)}
 inventory::submit! {CellRegistration::new(&["$div"], make_div)}
 inventory::submit! {CellRegistration::new(&["$mod"], make_mod)}
 inventory::submit! {CellRegistration::new(&["$le"], make_le)}
+inventory::submit! {CellRegistration::new(&["$lt"], make_lt)}
 inventory::submit! {CellRegistration::new(&["$ge"], make_ge)}
 inventory::submit! {CellRegistration::new(&["$gt"], make_gt)}
 inventory::submit! {CellRegistration::new(&["$shl"], make_shl)}
@@ -486,6 +509,7 @@ inventory::submit! {CellRegistration::new(&["$bmux"], make_bmux)}
 inventory::submit! {CellRegistration::new(&["$pmux"], make_pmux)}
 inventory::submit! {CellRegistration::new(&["$logic_and"], make_logic_and)}
 inventory::submit! {CellRegistration::new(&["$logic_not"], make_logic_not)}
+inventory::submit! {CellRegistration::new(&["$logic_or"], make_logic_or)}
 inventory::submit! {CellRegistration::new(&["$reduce_or", "$reduce_bool"], make_reduce_or)}
 inventory::submit! {CellRegistration::new(&["$reduce_and"], make_reduce_and)}
 inventory::submit! {CellRegistration::new(&["$and"], make_and)}

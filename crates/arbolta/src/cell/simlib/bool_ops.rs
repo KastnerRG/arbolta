@@ -27,9 +27,9 @@ impl CellFn for Not {
   fn reset(&mut self) {}
 }
 
-define_arithmetic_cell!(ProcAnd, bitand);
-define_arithmetic_cell!(ProcOr, bitor);
-define_arithmetic_cell!(ProcXor, bitxor);
+define_arithmetic_cell!(&["$and"], ProcAnd { a, b }, y, a.bitand(b));
+define_arithmetic_cell!(&["$or"], ProcOr { a, b }, y, a.bitor(b));
+define_arithmetic_cell!(&["$xor"], ProcXor { a, b }, y, a.bitxor(b));
 
 #[cfg(test)]
 mod tests {

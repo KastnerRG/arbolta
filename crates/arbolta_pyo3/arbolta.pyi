@@ -60,8 +60,8 @@ class HardwareDesign:
     :type torder_path: str | Path | PathLike
     :param config: Configuration for design ports
     :type config: dict[str, PortConfig]
-    :param use_slash_hierarchy: Use slash hierarchy, defaults to False
-    :type use_slash_hierarchy: bool
+    :param hierarchy_separator: Additional hierarchy separator for submodules
+    :type hierarchy_separator: str, optional
     :param top_module: Name of top module, defaults to None (find automatically)
     :type top_module: str, optional
     :param cell_mapping: Define additional cell types
@@ -81,7 +81,7 @@ class HardwareDesign:
         netlist_path: str | Path | PathLike,
         torder_path: str | Path | PathLike,
         config: dict[str, PortConfig],
-        use_slash_hierarchy: bool = False,
+        hierarchy_separator: Optional[str] = None,
         top_module: Optional[str] = None,
         cell_mapping: Optional[dict[str, tuple[str, Optional[dict[str, str]]]]] = None,
     ) -> None: ...

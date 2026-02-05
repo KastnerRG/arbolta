@@ -134,41 +134,47 @@ macro_rules! create_cell {
 }
 
 /* ++++++++ Sim Cells ++++++++ */
+// Unary
+create_cell!(&["$_BUF_"], Buffer { a }, y, |a: Bit| a);
+create_cell!(&["$_NOT_"], Inverter { a }, y, |a: Bit| !a);
+
+// Binary
 create_cell!(&["$_AND_"], And2 { a, b }, y, |a: Bit, b: Bit| a & b);
 create_cell!(&["$_ANDNOT_"], AndNot2 { a, b }, y, |a: Bit, b: Bit| a & !b);
+create_cell!(&["$_NAND_"], Nand2 { a, b }, y, |a: Bit, b: Bit| !(a & b));
+create_cell!(&["$_NOR_"], Nor2 { a, b }, y, |a: Bit, b: Bit| !(a | b));
+create_cell!(&["$_OR_"], Or2 { a, b }, y, |a: Bit, b: Bit| a | b);
+create_cell!(&["$_ORNOT_"], OrNot2 { a, b }, y, |a: Bit, b: Bit| a | !b);
+create_cell!(&["$_XNOR_"], Xnor2 { a, b }, y, |a: Bit, b: Bit| !(a ^ b));
+create_cell!(&["$_XOR_"], Xor2 { a, b }, y, |a: Bit, b: Bit| a ^ b);
+
+// Ternary
 create_cell!(
   &["$_AOI3_"],
   AndOrInvert3 { a, b, c },
   y,
   |a: Bit, b: Bit, c: Bit| { !((a & b) | c) }
 );
-create_cell!(&["$_BUF_"], Buffer { a }, y, |a: Bit| a);
-create_cell!(&["$_NOT_"], Inverter { a }, y, |a: Bit| !a);
 create_cell!(
   &["$_MUX_"],
   Mux2 { a, b, s },
   y,
   |a: Bit, b: Bit, select: Bit| if select.into() { b } else { a }
 );
-create_cell!(&["$_NAND_"], Nand2 { a, b }, y, |a: Bit, b: Bit| !(a & b));
 create_cell!(
   &["$_NMUX_"],
   NMux2 { a, b, s },
   y,
   |a: Bit, b: Bit, select: Bit| if select.into() { !b } else { !a }
 );
-create_cell!(&["$_NOR_"], Nor2 { a, b }, y, |a: Bit, b: Bit| !(a | b));
-create_cell!(&["$_OR_"], Or2 { a, b }, y, |a: Bit, b: Bit| a | b);
 create_cell!(
   &["$_OAI3_"],
   OrAndInvert3 { a, b, c },
   y,
   |a: Bit, b: Bit, c: Bit| { !((a | b) & c) }
 );
-create_cell!(&["$_ORNOT_"], OrNot2 { a, b }, y, |a: Bit, b: Bit| a | !b);
-create_cell!(&["$_XNOR_"], Xnor2 { a, b }, y, |a: Bit, b: Bit| !(a ^ b));
-create_cell!(&["$_XOR_"], Xor2 { a, b }, y, |a: Bit, b: Bit| a ^ b);
 
+// Memory
 #[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
 pub struct Dff {
   polarity: Bit,

@@ -1,6 +1,5 @@
 mod simcells;
 mod simlib;
-// mod temp;
 mod test_helpers;
 
 // Re-export
@@ -130,52 +129,58 @@ pub enum Cell {
   Asap7AndOrInv33,
   Asap7DffInv,
   // Sim Cells
+  // - Unary
+  Buffer,
+  Inverter,
+  // - Binary
   And2,
   AndNot2,
-  AndOrInvert3,
-  Buffer,
-  Dff,
-  DffReset,
-  Inverter,
-  Mux2,
   Nand2,
-  NMux2,
   Nor2,
   Or2,
-  OrAndInvert3,
   OrNot2,
   Xnor2,
   Xor2,
+  // - Ternary
+  AndOrInvert3,
+  Mux2,
+  NMux2,
+  OrAndInvert3,
+  // - Memory
+  Dff,
+  DffReset,
   // Sim Lib
-  Not,
-  Neg,
-  Pos,
+  // - Arithmetic
   Add,
-  Sub,
-  Mul,
   Div,
+  Equal,
+  GreaterEqual,
+  GreaterThan,
+  LessEqual,
+  LessThan,
   Modulus,
-  Le,
-  Lt,
-  Ge,
-  Gt,
-  Shl,
-  Shr,
-  Reg,
+  Mul,
+  Negate,
+  NotEqual,
+  Sub,
+  //
   ALDff,
-  Mux,
   BMux,
-  PMux,
   LogicAnd,
   LogicNot,
   LogicOr,
-  ReduceOr,
-  ReduceAnd,
+  Mux,
+  Not,
+  PMux,
+  Pos,
   ProcAnd,
-  Eq,
-  Ne,
   ProcOr,
   ProcXor,
+  ReduceAnd,
+  ReduceOr,
+  Reg,
+  Shl,
+  Shr,
 }
 
 #[derive(Debug, Error)]

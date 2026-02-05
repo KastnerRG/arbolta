@@ -50,7 +50,7 @@ fn test_add(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] 
     },
   );
 
-  let mut module = HardwareModule::new(netlist, None, torder, false, None).unwrap();
+  let mut module = HardwareModule::new(netlist, None, torder, None, None).unwrap();
 
   module.set_port("A", a).unwrap();
   module.set_port("B", b).unwrap();
@@ -80,7 +80,7 @@ fn test_mux(#[case] select: Bit, #[case] a: BitVec, #[case] b: BitVec, #[case] e
     },
   );
 
-  let mut module = HardwareModule::new(netlist, None, torder, false, None).unwrap();
+  let mut module = HardwareModule::new(netlist, None, torder, None, None).unwrap();
 
   module.set_port("S", [select]).unwrap();
   module.set_port("A", a).unwrap();
@@ -113,7 +113,7 @@ fn test_reg(#[case] polarity: Bit, #[case] data_in: BitVec) {
     },
   );
 
-  let mut module = HardwareModule::new(netlist, None, torder, false, None).unwrap();
+  let mut module = HardwareModule::new(netlist, None, torder, None, None).unwrap();
   let clock_net = module.get_net("CLK").unwrap()[0];
   module.set_clock(clock_net, polarity).unwrap();
 
@@ -162,7 +162,7 @@ fn test_logic_and(#[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec
     },
   );
 
-  let mut module = HardwareModule::new(netlist, None, torder, false, None).unwrap();
+  let mut module = HardwareModule::new(netlist, None, torder, None, None).unwrap();
 
   module.set_port("A", a).unwrap();
   module.set_port("B", b).unwrap();
@@ -195,7 +195,7 @@ fn test_logic_not(#[case] a: BitVec, #[case] expected: BitVec) {
     },
   );
 
-  let mut module = HardwareModule::new(netlist, None, torder, false, None).unwrap();
+  let mut module = HardwareModule::new(netlist, None, torder, None, None).unwrap();
 
   module.set_port("A", a).unwrap();
   module.eval();
@@ -226,7 +226,7 @@ fn test_reduce_or(#[case] a: BitVec, #[case] expected: BitVec) {
     },
   );
 
-  let mut module = HardwareModule::new(netlist, None, torder, false, None).unwrap();
+  let mut module = HardwareModule::new(netlist, None, torder, None, None).unwrap();
 
   module.set_port("A", a).unwrap();
   module.eval();

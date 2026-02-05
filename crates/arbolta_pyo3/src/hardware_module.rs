@@ -31,7 +31,7 @@ impl HardwareDesign {
     netlist_path: PathBuf,
     top_module: Option<&str>,
     torder_path: PathBuf,
-    use_slash_hierarchy: bool,
+    hierarchy_separator: Option<&str>,
     cell_mapping: Option<&CellMapping>,
   ) -> anyhow::Result<Self> {
     // Read raw JSON netlist
@@ -46,7 +46,7 @@ impl HardwareDesign {
       netlist,
       top_module,
       torder,
-      use_slash_hierarchy,
+      hierarchy_separator,
       cell_mapping,
     )?;
 
@@ -136,13 +136,13 @@ impl HardwareDesign {
 #[pymethods]
 impl HardwareDesign {
   #[new]
-  #[pyo3(signature = (netlist_path, torder_path, config, use_slash_hierarchy=false, top_module=None, cell_mapping=None))]
+  #[pyo3(signature = (netlist_path, torder_path, config, hierarchy_separator=None, top_module=None, cell_mapping=None))]
   pub fn new(
     py: Python<'_>,
     netlist_path: PathBuf,
     torder_path: PathBuf,
     config: HashMap<String, PyRef<PortConfig>>,
-    use_slash_hierarchy: bool,
+    hierarchy_separator: Option<&str>,
     top_module: Option<&str>,
     cell_mapping: Option<CellMapping>,
   ) -> anyhow::Result<Py<Self>> {
@@ -150,7 +150,7 @@ impl HardwareDesign {
       netlist_path,
       top_module,
       torder_path,
-      use_slash_hierarchy,
+      hierarchy_separator,
       cell_mapping.as_ref(),
     )?;
 

@@ -66,10 +66,10 @@ impl HardwareModule {
     netlist: Netlist,
     top_module: Option<&str>,
     torder: TopoOrder,
-    use_slash_hierarchy: bool,
+    hierarchy_separator: Option<&str>,
     cell_mapping: Option<&CellMapping>,
   ) -> Result<HardwareModule, ModuleError> {
-    let netlist = NetlistWrapper::new(netlist, top_module, torder, use_slash_hierarchy)?;
+    let netlist = NetlistWrapper::new(netlist, top_module, torder, hierarchy_separator)?;
 
     let cells = netlist.build_cells(cell_mapping)?;
 

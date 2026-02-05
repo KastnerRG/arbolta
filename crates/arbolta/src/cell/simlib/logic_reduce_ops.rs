@@ -1,103 +1,58 @@
-use super::CellFn;
+use super::*;
 use crate::{bit::Bit, signal::Signals};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 
-macro_rules! reduce_nets {
-  ($signals:expr, $nets:expr, $initial:expr, $op:tt) => {
-    $nets
-      .iter()
-      .fold($initial, |acc, i| acc $op $signals.get_net(*i))
+macro_rules! define_reduce_cell {
+  ($rtl_names:expr, $cell_type:ident { $($in_netn:ident),* $(,)?}, $out_net:ident, $op:tt, $body:expr) => {
+    #[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
+    pub struct $cell_type {
+      $(
+        $in_netn: Box<[usize]>,
+      )*
+
+      $out_net: Box<[usize]>
+    }
+
+    impl CellFn for $cell_type {
+      #[inline]
+      fn eval(&mut self, signals: &mut Signals) {
+        $(
+          let $in_netn: Bit = self
+            .$in_netn
+            .iter()
+            .fold(Bit::ZERO, |acc, &n| acc $op signals.get_net(n));
+        )*
+
+        signals.set_net(self.$out_net[0], $body );
+      }
+
+      fn reset(&mut self) {}
+    }
+
+    paste! {
+      inventory::submit! {CellRegistration::new($rtl_names,
+        |connections: &BTreeMap<&str, Box<[usize]>>, _parameters: &BTreeMap<&str, usize>| {
+          if env::var("ARBOLTA_DEBUG").is_ok() {
+            println!("Parsing connections: {:#?}", connections);
+          }
+
+          $cell_type::new(
+            $(
+              connections[stringify!([<$in_netn:upper>])].clone(),
+            )*
+            connections[stringify!([<$out_net:upper>])].clone()
+          ).into()
+      })}
+    }
   };
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
-pub struct ReduceAnd {
-  a_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
-}
-
-impl CellFn for ReduceAnd {
-  #[inline]
-  fn eval(&mut self, signals: &mut Signals) {
-    signals.set_net(
-      self.y_nets[0],
-      reduce_nets!(signals, self.a_nets, Bit::ZERO, &),
-    );
-  }
-
-  fn reset(&mut self) {}
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
-pub struct ReduceOr {
-  pub a_nets: Box<[usize]>,
-  pub y_nets: Box<[usize]>,
-}
-
-impl CellFn for ReduceOr {
-  #[inline]
-  fn eval(&mut self, signals: &mut Signals) {
-    signals.set_net(
-      self.y_nets[0],
-      reduce_nets!(signals, self.a_nets, Bit::ZERO, |),
-    );
-  }
-
-  fn reset(&mut self) {}
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
-pub struct LogicAnd {
-  pub a_nets: Box<[usize]>,
-  pub b_nets: Box<[usize]>,
-  pub y_nets: Box<[usize]>,
-}
-
-impl CellFn for LogicAnd {
-  #[inline]
-  fn eval(&mut self, signals: &mut Signals) {
-    let a: Bit = reduce_nets!(signals, self.a_nets, Bit::ZERO, |);
-    let b: Bit = reduce_nets!(signals, self.b_nets, Bit::ZERO, |);
-    signals.set_net(self.y_nets[0], a & b);
-  }
-
-  fn reset(&mut self) {}
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
-pub struct LogicNot {
-  pub a_nets: Box<[usize]>,
-  pub y_nets: Box<[usize]>,
-}
-
-impl CellFn for LogicNot {
-  #[inline]
-  fn eval(&mut self, signals: &mut Signals) {
-    let a: Bit = reduce_nets!(signals, self.a_nets, Bit::ZERO, |);
-    signals.set_net(self.y_nets[0], !a);
-  }
-
-  fn reset(&mut self) {}
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
-pub struct LogicOr {
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
-}
-
-impl CellFn for LogicOr {
-  #[inline]
-  fn eval(&mut self, signals: &mut Signals) {
-    let a: Bit = reduce_nets!(signals, self.a_nets, Bit::ZERO, |);
-    let b: Bit = reduce_nets!(signals, self.b_nets, Bit::ZERO, |);
-    signals.set_net(self.y_nets[0], a | b);
-  }
-
-  fn reset(&mut self) {}
-}
+define_reduce_cell!(&["$reduce_and"], ReduceAnd { a }, y, &, a);
+define_reduce_cell!(&["$reduce_or", "$reduce_bool"], ReduceOr { a }, y, |, a);
+define_reduce_cell!(&["$logic_and"], LogicAnd { a, b }, y, |, a & b);
+define_reduce_cell!(&["$logic_not"], LogicNot { a }, y, |, !a);
+define_reduce_cell!(&["$logic_or"], LogicOr { a, b }, y, |, a | b);
 
 #[cfg(test)]
 mod tests {

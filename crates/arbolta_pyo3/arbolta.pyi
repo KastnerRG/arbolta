@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Any, Literal, Optional, Type
+from typing import Literal, Optional
 
 import numpy as np
-from numpy.typing import ArrayLike
+from networkx import DiGraph
+from numpy.typing import ArrayLike, DTypeLike
 
 @dataclass
 class PortConfig:
@@ -14,7 +15,7 @@ class PortConfig:
     :var shape: Interpret port bits with shape, defaults to (1, 1)
     :vartype shape: tuple[int, int]
     :var dtype: Interpret port bits as `dtype`, defaults to `np.uint`
-    :vartype dtype: np.dtype | Type[Any]], optional
+    :vartype dtype: DTypeLike, optional
     :var clock: Port is a clock signal, defaults to None
     :vartype clock: bool, optional
     :var reset: Port is a reset signal, defaults to None
@@ -24,7 +25,7 @@ class PortConfig:
     """
 
     shape: tuple[int, int] = (1, 1)
-    dtype: Optional[np.dtype | Type[Any]] = np.uint
+    dtype: Optional[DTypeLike] = np.uint
     clock: Optional[bool] = None
     reset: Optional[bool] = None
     polarity: Optional[Literal[0, 1]] = None
@@ -122,3 +123,5 @@ class HardwareDesign:
     def toggle_count(
         self, category: str = "total", by_net: bool = True
     ) -> dict[str, dict[str, int]] | dict[str, int]: ...
+    def netlist(self) -> dict: ...
+    def netlist_graph(self) -> DiGraph: ...

@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct NetlistWrapper {
   pub top_module: String,
-  netlist: Netlist,
+  pub netlist: Netlist,
   pub cells: Vec<RTLID>, // Should be in topological order
   pub modules: HashSet<Vec<String>>,
   pub nets: HashMap<RTLID, Box<[usize]>>,

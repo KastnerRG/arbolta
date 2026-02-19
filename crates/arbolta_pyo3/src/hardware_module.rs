@@ -9,16 +9,20 @@ use arbolta::{
   bit::Bit,
   cell::CellMapping,
   hardware_module::{HardwareModule, ToggleCount},
-  port::PortDirection,
+  port::{PortDirection, parse_bit},
   yosys::{Netlist, parse_torder},
 };
+use petgraph::visit::EdgeRef;
 use pyo3::{
   exceptions::{PyAttributeError, PyValueError},
   prelude::*,
   types::{PyDict, PyList},
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+  collections::{HashMap, HashSet},
+  path::PathBuf,
+};
 
 #[pyclass(weakref, dict)]
 #[derive(Deserialize, Serialize)]
@@ -243,5 +247,114 @@ impl HardwareDesign {
     }
 
     Ok(toggles.into())
+  }
+
+  pub fn netlist(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+    let json = py.import("json")?;
+    let netlist = self
+      .module
+      .netlist
+      .netlist
+      .to_string()
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
+
+    let netlist_dict: Bound<'_, PyDict> = json.getattr("loads")?.call1((netlist,))?.cast_into()?;
+    Ok(netlist_dict.unbind())
+  }
+
+  pub fn netlist_graph(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let networkx = py.import("networkx")?;
+
+    let graph = self
+      .module
+      .netlist
+      .build_graph()
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
+
+    let nx_graph = networkx.getattr("DiGraph")?.call0()?;
+
+    // Add nodes
+    let mut nodes: Vec<(usize, Py<PyDict>)> = vec![];
+    for i in graph.node_indices() {
+      let rtlid = graph.node_weight(i).unwrap();
+
+      let entry = PyDict::new(py);
+      entry.set_item("rtlid", rtlid.to_string())?;
+
+      // $input or $output cell, early continue
+      let Some(cell) = self.module.netlist.find_cell(rtlid) else {
+        nodes.push((i.index(), entry.unbind()));
+        continue;
+      };
+
+      // Extract other fields
+      entry.set_item("cell_type", cell.cell_type.clone())?;
+
+      if let Some(src_attr) = cell.attributes.get("src")
+        && let Some(src) = src_attr.to_string_if_string()
+      {
+        entry.set_item("src", src.to_string())?;
+      }
+
+      nodes.push((i.index(), entry.unbind()));
+    }
+    nx_graph.call_method1("add_nodes_from", (nodes,))?;
+
+    // Add edges
+    let mut edges: Vec<(usize, usize, Py<PyDict>)> = vec![];
+    for edge in graph.edge_references() {
+      let net_driver_node = edge.source();
+      let net_user_node = edge.target();
+
+      let net_driver = graph.node_weight(net_driver_node).unwrap();
+      let net_user = graph.node_weight(net_user_node).unwrap();
+      let net = *edge.weight();
+
+      let entry = PyDict::new(py);
+      entry.set_item("net", net)?;
+
+      if let Some(driver_cell) = self.module.netlist.find_cell(net_driver) {
+        for (port_name, bits) in &driver_cell.connections {
+          // TODO: pre-process this somehow
+          let nets = HashSet::<usize>::from_iter(
+            bits
+              .iter()
+              .map(parse_bit)
+              .collect::<Result<Vec<_>, _>>()
+              .map_err(|e| PyAttributeError::new_err(format!("{e}")))?,
+          );
+
+          if nets.contains(&net) {
+            entry.set_item("driver", port_name.clone())?;
+          }
+        }
+      }
+
+      if let Some(user_cell) = self.module.netlist.find_cell(net_user) {
+        for (port_name, bits) in &user_cell.connections {
+          // TODO: pre-process this somehow
+          let nets = HashSet::<usize>::from_iter(
+            bits
+              .iter()
+              .map(parse_bit)
+              .collect::<Result<Vec<_>, _>>()
+              .map_err(|e| PyAttributeError::new_err(format!("{e}")))?,
+          );
+
+          if nets.contains(&net) {
+            entry.set_item("user", port_name.clone())?;
+          }
+        }
+      }
+
+      edges.push((
+        net_driver_node.index(),
+        net_user_node.index(),
+        entry.unbind(),
+      ));
+    }
+    nx_graph.call_method1("add_edges_from", (edges,))?;
+
+    Ok(nx_graph.into())
   }
 }

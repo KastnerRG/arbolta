@@ -10,7 +10,7 @@ authors = [
     { name = "Alexander Redding", email = "alredding@ucsd.edu" },
 ]
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [

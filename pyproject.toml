@@ -45,6 +45,7 @@ strip = true
 python-source = "python/py_src"
 exclude = [
     "python/tests/*",
+    "examples/*", # Shouldn't get included but just in-case
 ]
 
 [tool.uv]

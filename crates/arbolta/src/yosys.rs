@@ -1,196 +1,73 @@
-use std::{
-  collections::HashMap,
-  net::{IpAddr, Ipv6Addr},
-  time::Duration,
-  {path::PathBuf, process::Command},
-};
-use tarpc::{client, context, tokio_serde::formats::Json};
-use thiserror::Error;
-use tokio::time;
-use yosys_netlist_json as yosys_json;
-pub use yosys_service::*;
+// Re-export
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, fmt};
 
-#[derive(Debug)]
-pub struct YosysClient {
-  pub port: u16,
-  pub yosys_server_path: PathBuf,
-  pub yosys_path: PathBuf,
+fn remove_whitespace<S: AsRef<str>>(s: &S) -> String {
+  s.as_ref().chars().filter(|c| !c.is_whitespace()).collect()
 }
 
-impl Default for YosysClient {
-  fn default() -> Self {
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Deserialize, Serialize, PartialOrd, Ord)]
+pub struct RTLID {
+  pub parents: Vec<String>,
+  pub name: String,
+}
+
+impl RTLID {
+  pub fn new<S: AsRef<str>>(parents: &[S], name: &S) -> Self {
+    let mut name_clean = remove_whitespace(name);
+    let parents_clean: Vec<String> = parents.iter().map(|p| remove_whitespace(p)).collect();
+
+    if !parents_clean.is_empty() {
+      let name_stripped = name_clean.strip_prefix("$flatten\\").unwrap_or(&name_clean);
+      let parents_prefix = format!("{}.", parents_clean.join("."));
+
+      if let Some(actual_name) = name_stripped.strip_prefix(&parents_prefix) {
+        name_clean = actual_name.to_string();
+      } else {
+        name_clean = name_stripped.to_string();
+      }
+    }
+
     Self {
-      port: 8080,
-      yosys_server_path: "yosys_server".into(),
-      yosys_path: "yosys".into(),
+      parents: parents_clean,
+      name: name_clean,
     }
   }
 }
 
-#[derive(Debug, Error)]
-pub enum YosysError {
-  #[error("Server error: {0}")]
-  Server(#[from] serde_error::Error),
-
-  #[error("RPC error: {0}")]
-  Rpc(#[from] tarpc::client::RpcError),
-
-  #[error("IO error: {0}")]
-  Io(#[from] std::io::Error),
-
-  #[error("Yosys error: {0}")]
-  Yosys(String),
-}
-
-const MAX_RETRIES: u32 = 4;
-const RETRY_DELAY_MS: u64 = 1;
-
-impl YosysClient {
-  pub async fn flatten_netlist(
-    &self,
-    top_module: &str,
-    netlist: yosys_json::Netlist,
-  ) -> Result<(yosys_json::Netlist, HashMap<String, Vec<String>>), YosysError> {
-    // Start Yosys server
-    let mut yosys = Command::new(&self.yosys_server_path)
-      .arg("--port")
-      .arg(format!("{}", self.port))
-      .arg("--yosys-path")
-      .arg(&self.yosys_path)
-      .spawn()?;
-
-    let server_addr = (IpAddr::V6(Ipv6Addr::LOCALHOST), self.port);
-
-    // Keep trying to connect to server
-    let mut retries = 0;
-    let transport = loop {
-      let mut transport = tarpc::serde_transport::tcp::connect(server_addr, Json::default);
-      transport.config_mut().max_frame_length(usize::MAX);
-
-      match transport.await {
-        Ok(t) => break t,
-        Err(e) => {
-          retries += 1;
-          eprintln!("Yosys client failed to connect (attempt {retries}): {e}");
-
-          if retries >= MAX_RETRIES {
-            return Err(e.into());
-          }
-
-          time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-        }
-      }
-    };
-
-    let request = FlattenRequest {
-      top_module: top_module.into(),
-      netlist,
-    };
-    let client = SynthesisClient::new(client::Config::default(), transport).spawn();
-
-    let response = async move {
-      tokio::select! {
-        response1 = client.flatten(context::current(), request) => {response1}
-      }
+impl fmt::Display for RTLID {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    if self.parents.is_empty() {
+      write!(f, "{}", self.name)
+    } else {
+      write!(f, "{}.{}", self.parents.join("."), self.name)
     }
-    .await??;
-
-    // Check Yosys error log
-    if !response.error_log.is_empty() {
-      return Err(YosysError::Yosys(response.error_log));
-    }
-
-    yosys.kill()?; // Kill Yosys server
-
-    Ok((response.netlist.unwrap(), response.topo_order.unwrap()))
-  }
-
-  // TODO: De-duplicate code
-  pub async fn simple_synth(
-    &self,
-    verilog_path: &PathBuf,
-    top_module: Option<String>,
-    config: SynthConfig,
-  ) -> Result<(yosys_json::Netlist, HashMap<String, Vec<String>>), YosysError> {
-    let verilog_source = std::fs::read_to_string(verilog_path)?;
-
-    // Try to start Yosys server, should fail if already started
-    // TODO: Clean this up
-    let mut _yosys = Command::new(&self.yosys_server_path)
-      .arg("--port")
-      .arg(format!("{}", self.port))
-      .arg("--yosys-path")
-      .arg(&self.yosys_path)
-      .spawn();
-
-    let server_addr = (IpAddr::V6(Ipv6Addr::LOCALHOST), self.port);
-
-    // Keep trying to connect to server
-    let mut retries = 0;
-    let transport = loop {
-      let mut transport = tarpc::serde_transport::tcp::connect(server_addr, Json::default);
-      transport.config_mut().max_frame_length(usize::MAX);
-
-      match transport.await {
-        Ok(t) => break t,
-        Err(e) => {
-          retries += 1;
-          eprintln!("Yosys client failed to connect (attempt {retries}): {e}",);
-
-          if retries >= MAX_RETRIES {
-            return Err(e.into());
-          }
-
-          time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-        }
-      }
-    };
-
-    let request = SimpleSynthRequest {
-      verilog_source,
-      top_module,
-      config,
-    };
-
-    let client = SynthesisClient::new(client::Config::default(), transport).spawn();
-
-    let response = async move {
-      tokio::select! {
-        response1 = client.simple_synth(context::current(), request) => {response1}
-      }
-    }
-    .await??;
-
-    // Check Yosys error log
-    if !response.error_log.is_empty() {
-      return Err(YosysError::Yosys(response.error_log));
-    }
-
-    // yosys.kill()?; // Kill Yosys server
-
-    Ok((response.netlist.unwrap(), response.topo_order.unwrap()))
   }
 }
 
-// TODO: De-duplicate with yosys_server
-/// Parse raw Yosys topological order output
-pub fn parse_torder(raw: &str) -> HashMap<String, Vec<String>> {
-  let mut torder: HashMap<String, Vec<String>> = HashMap::new();
-  let mut current_module: Option<&str> = None; // If Some, save cells
+pub type TopoOrder<'a> = HashMap<&'a str, Vec<&'a str>>;
+
+pub fn parse_torder<'a>(raw: &'a str) -> TopoOrder<'a> {
+  let mut torder = TopoOrder::new();
+  let mut current_module: Option<&'a str> = None;
 
   for line in raw.lines() {
     let line = line.trim();
 
     // Start new module
     if let Some(module_name) = line.strip_prefix("module ") {
-      current_module = Some(module_name)
-    } else if let Some(module_name) = current_module
+      let module_name = if let Some((_cell_type, module_name)) = module_name.split_once("$") {
+        module_name
+      } else {
+        module_name
+      };
+
+      current_module = Some(module_name);
+      torder.insert(module_name, vec![]);
+    } else if let Some(module_path) = current_module
       && let Some(cell_name) = line.strip_prefix("cell ")
     {
-      torder
-        .entry(module_name.to_string())
-        .or_default()
-        .push(cell_name.to_string());
+      torder.entry(module_path).or_default().push(cell_name);
     }
   }
 
@@ -198,4 +75,8 @@ pub fn parse_torder(raw: &str) -> HashMap<String, Vec<String>> {
 }
 
 // Re-export
-pub use yosys_json::Netlist;
+pub use yosys_netlist_json::{
+  AttributeVal, BitVal, Cell, Module, Netlist, Netname, Port, PortDirection, SpecialBit,
+};
+
+// TODO: Maybe re-add Yosys bindings...

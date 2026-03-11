@@ -2,11 +2,10 @@ use std::ops::{BitAnd, BitOr, BitXor};
 
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
 pub struct Not {
   signed: bool,
   a_nets: Box<[usize]>,
@@ -28,14 +27,14 @@ impl CellFn for Not {
   fn reset(&mut self) {}
 }
 
-define_arithmetic_cell!(ProcAnd, bitand);
-define_arithmetic_cell!(ProcOr, bitor);
-define_arithmetic_cell!(ProcXor, bitxor);
+define_arithmetic_cell!(&["$and"], ProcAnd { a, b }, y, a.bitand(b));
+define_arithmetic_cell!(&["$or"], ProcOr { a, b }, y, a.bitor(b));
+define_arithmetic_cell!(&["$xor"], ProcXor { a, b }, y, a.bitxor(b));
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::cell::test_macros::*;
+  use crate::cell::test_helpers::*;
   use rstest::rstest;
 
   #[rstest]
@@ -65,7 +64,7 @@ mod tests {
   #[case(false, "1111", "1111", "1111")]
   #[case(false, "0000", "1111", "0000")]
   fn and(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
-    run_binary_cell_case!(ProcAnd, signed, a, b, expected);
+    run_binary_cell_case_signed!(ProcAnd, signed, a, b, expected);
   }
 
   #[rstest]

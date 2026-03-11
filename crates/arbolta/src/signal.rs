@@ -2,16 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 use crate::bit::Bit;
-use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 /// Connection between cells/modules and related statistics.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default, Encode, Decode)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
 pub struct Signals {
   // Total number of nets
   pub size: usize,
   /// Value of nets
   pub nets: Box<[Bit]>, // TODO: Make this private
+  /// Signals have been modified
+  dirty: bool,
   // Is net constant
   constant: Box<[bool]>,
   /// Number of times net has transitioned from 0 -> 1
@@ -24,6 +25,7 @@ impl Signals {
   pub fn new(size: usize) -> Self {
     Self {
       size,
+      dirty: false,
       nets: vec![Bit::ZERO; size].into(),
       constant: vec![false; size].into(),
       toggles_rising: vec![0; size].into(),
@@ -47,6 +49,7 @@ impl Signals {
       Bit::ZERO => self.toggles_falling[net] += 1,
     }
 
+    self.dirty = true;
     self.nets[net] = val;
   }
 
@@ -79,8 +82,19 @@ impl Signals {
     self.constant[net] = false;
   }
 
+  #[inline]
+  pub fn is_dirty(&self) -> bool {
+    self.dirty
+  }
+
+  #[inline]
+  pub fn clear_dirty(&mut self) {
+    self.dirty = false
+  }
+
   /// Reset all nets to `Bit::ZERO` and clear statistics.
   pub fn reset(&mut self) {
+    self.dirty = false;
     self.nets.iter_mut().for_each(|n| *n = Bit::ZERO);
     self.constant.iter_mut().for_each(|c| *c = false);
     self.toggles_rising.iter_mut().for_each(|t| *t = 0);
@@ -93,7 +107,7 @@ impl Signals {
   /// # Arguments
   /// * `net` - Selected signal net.
   #[inline]
-  pub fn get_total_toggles(&self, net: usize) -> u64 {
+  pub fn get_toggles_total(&self, net: usize) -> u64 {
     self.toggles_falling[net] + self.toggles_rising[net]
   }
 

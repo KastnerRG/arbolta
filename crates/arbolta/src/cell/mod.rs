@@ -1,18 +1,19 @@
 mod simcells;
 mod simlib;
-mod test_macros;
+mod test_helpers;
 
 // Re-export
+use crate::signal::Signals;
+use enum_dispatch::enum_dispatch;
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 pub use simcells::*;
 pub use simlib::*;
-
-use crate::{bit::Bit, signal::Signals};
-use bincode::{Decode, Encode};
-use enum_dispatch::enum_dispatch;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{
+  collections::{BTreeMap, HashMap},
+  env,
+};
 use thiserror::Error;
-use yosys_netlist_json as yosys_json;
 
 #[enum_dispatch]
 pub trait CellFn {
@@ -20,55 +21,167 @@ pub trait CellFn {
   fn reset(&mut self);
 }
 
+// connections, parameters
+pub type CellCtor = fn(&BTreeMap<&str, Box<[usize]>>, &BTreeMap<&str, usize>) -> Cell;
+pub type CellDispatchMap = HashMap<&'static str, CellCtor>;
+
+#[derive(derive_more::Constructor)]
+pub struct CellRegistration {
+  pub aliases: &'static [&'static str],
+  pub ctor: CellCtor,
+}
+
+inventory::collect!(CellRegistration);
+
+pub static CELL_DISPATCH: Lazy<HashMap<&'static str, CellCtor>> = Lazy::new(|| {
+  let mut cell_map = HashMap::new();
+  for registration in inventory::iter::<CellRegistration> {
+    for name in registration.aliases {
+      cell_map.insert(*name, registration.ctor);
+    }
+  }
+  cell_map
+});
+
 #[enum_dispatch(CellFn)]
-#[derive(Debug, Serialize, Deserialize, Clone, Decode, Encode)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 /// Proxy for a standard-cell and basic unit of 'compute'.
 pub enum Cell {
+  // ASAP7
+  Asap7Buf,
+  Asap7Inv,
+  Asap7And2,
+  Asap7And3,
+  Asap7And4,
+  Asap7And5,
+  Asap7FullAdderInv,
+  Asap7HalfAdderInv,
+  Asap7MajorityInv,
+  Asap7Majority,
+  Asap7Nand2,
+  Asap7Nand3,
+  Asap7Nand4,
+  Asap7Nand5,
+  Asap7Nor2,
+  Asap7Nor3,
+  Asap7Nor4,
+  Asap7Nor5,
+  Asap7Or2,
+  Asap7Or3,
+  Asap7Or4,
+  Asap7Or5,
+  Asap7TieHigh,
+  Asap7TieLow,
+  Asap7Xnor2,
+  Asap7Xor2,
+  Asap7Or2And1Or1Inv,
+  Asap7OrAnd211,
+  Asap7OrAnd21,
+  Asap7OrAnd221,
+  Asap7OrAnd222,
+  Asap7OrAnd22,
+  Asap7OrAnd31,
+  Asap7OrAnd331,
+  Asap7OrAnd332,
+  Asap7OrAnd333,
+  Asap7OrAnd33,
+  Asap7OrAndInv211,
+  Asap7OrAndInv21,
+  Asap7OrAndInv221,
+  Asap7OrAndInv222,
+  Asap7OrAndInv22,
+  Asap7OrAndInv311,
+  Asap7OrAndInv31,
+  Asap7OrAndInv321,
+  Asap7OrAndInv322,
+  Asap7OrAndInv32,
+  Asap7OrAndInv331,
+  Asap7OrAndInv332,
+  Asap7OrAndInv333,
+  Asap7OrAndInv33,
+  Asap7And2Or1And1Inv,
+  Asap7And2Or1And1Or1Inv,
+  Asap7AndOr211,
+  Asap7AndOr21,
+  Asap7AndOr221,
+  Asap7AndOr222,
+  Asap7AndOr22,
+  Asap7AndOr31,
+  Asap7AndOr322,
+  Asap7AndOr32,
+  Asap7AndOr331,
+  Asap7AndOr332,
+  Asap7AndOr333,
+  Asap7AndOr33,
+  Asap7AndOrInv211,
+  Asap7AndOrInv21,
+  Asap7AndOrInv221,
+  Asap7AndOrInv222,
+  Asap7AndOrInv22,
+  Asap7AndOrInv311,
+  Asap7AndOrInv31,
+  Asap7AndOrInv321,
+  Asap7AndOrInv322,
+  Asap7AndOrInv32,
+  Asap7AndOrInv331,
+  Asap7AndOrInv332,
+  Asap7AndOrInv333,
+  Asap7AndOrInv33,
+  Asap7DffInv,
   // Sim Cells
+  // - Unary
   Buffer,
   Inverter,
-  And,
-  Nand,
-  Or,
-  Nor,
-  Xor,
-  Xnor,
-  AndNot,
-  OrNot,
+  // - Binary
+  And2,
+  AndNot2,
+  Nand2,
+  Nor2,
+  Or2,
+  OrNot2,
+  Xnor2,
+  Xor2,
+  // - Ternary
+  AndOrInvert3,
   Mux2,
   NMux2,
-  AndOrInvert,
-  OrAndInvert,
+  OrAndInvert3,
+  // - Memory
   Dff,
   DffReset,
   // Sim Lib
-  Not,
-  Neg,
-  Pos,
+  // - Arithmetic
   Add,
-  Sub,
-  Mul,
   Div,
+  Equal,
+  GreaterEqual,
+  GreaterThan,
+  LessEqual,
+  LessThan,
   Modulus,
-  Le,
-  Ge,
-  Gt,
-  Shl,
-  Shr,
-  Reg,
-  ALDff,
-  Mux,
+  Mul,
+  Negate,
+  NotEqual,
+  Sub,
+  //
+  DffAsyncLoad,
+  DffAsyncResetEnable,
   BMux,
-  PMux,
   LogicAnd,
   LogicNot,
-  ReduceOr,
-  ReduceAnd,
+  LogicOr,
+  Mux,
+  Not,
+  PMux,
+  Pos,
   ProcAnd,
-  Eq,
-  Ne,
   ProcOr,
   ProcXor,
+  ReduceAnd,
+  ReduceOr,
+  Reg,
+  Shl,
+  Shr,
 }
 
 #[derive(Debug, Error)]
@@ -79,288 +192,39 @@ pub enum CellError {
   NotFound(String),
   #[error("Direction `{0}` not supported")]
   Direction(String),
-  #[error("Bad parameter `{0}` = `{1:?}`")]
-  Parameter(String, yosys_json::AttributeVal),
 }
 
-/// Parse global net from `BitVal`.
-/// Errors if bit direction is not supported.
-fn parse_bit(bit: &yosys_json::BitVal) -> Result<usize, CellError> {
-  match bit {
-    yosys_json::BitVal::N(net) => Ok(*net),
-    yosys_json::BitVal::S(constant) => match constant {
-      yosys_json::SpecialBit::_0 => Ok(0), // Global 0
-      yosys_json::SpecialBit::_1 => Ok(1), // Global 1
-      yosys_json::SpecialBit::X => Err(CellError::Direction("X".to_string())),
-      yosys_json::SpecialBit::Z => Err(CellError::Direction("Z".to_string())),
-    },
-  }
-}
+pub type CellMapping = HashMap<String, (String, Option<HashMap<String, String>>)>;
 
-/// Generate a cell given its Yosys netlist description
-/// # Arguments
-/// * `cell` - Yosys cell
-pub fn create_cell(cell: &yosys_json::Cell) -> Result<Cell, CellError> {
-  // Port name -> net
-  let mut connections: HashMap<String, Vec<usize>> = HashMap::new();
-  for (port_name, port_bits) in cell.connections.iter() {
-    for bit in port_bits {
-      let net = parse_bit(bit)?;
-      connections
-        .entry(port_name.to_string())
-        .or_default()
-        .push(net);
-    }
+pub fn create_cell(
+  cell_type: &str,
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
+  mapping: Option<&CellMapping>,
+) -> Result<Cell, CellError> {
+  if env::var("ARBOLTA_DEBUG").is_ok() {
+    println!("Parsing cell `{cell_type}`")
   }
 
-  let mut parameters: HashMap<String, usize> = HashMap::new();
-  for (param_name, param) in cell.parameters.iter() {
-    let Some(param) = param.to_number() else {
-      return Err(CellError::Parameter(param_name.to_string(), param.clone()));
+  let (cell_type, connections) = if let Some(mapping) = mapping
+    && let Some((mapped_cell_type, mapped_connections)) = mapping.get(cell_type)
+  {
+    let connections = match mapped_connections {
+      Some(mapped_connections) => connections
+        .iter()
+        .map(|(&port_name, nets)| (mapped_connections[port_name].as_str(), nets.clone()))
+        .collect(),
+      None => connections.clone(),
     };
-    parameters.insert(param_name.to_string(), param);
-  }
 
-  let new_cell: Cell = match cell.cell_type.as_str() {
-    // Sim cells
-    "BUF" | "$_BUF_" => Cell::Buffer(Buffer::new(connections["A"][0], connections["Y"][0])),
-    "NOT" | "$_NOT_" => Cell::Inverter(Inverter::new(connections["A"][0], connections["Y"][0])),
-    "AND" | "$_AND_" => Cell::And(And::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["Y"][0],
-    )),
-    "NAND" | "$_NAND_" => Cell::Nand(Nand::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["Y"][0],
-    )),
-    "OR" | "$_OR_" => Cell::Or(Or::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["Y"][0],
-    )),
-    "NOR" | "$_NOR_" => Cell::Nor(Nor::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["Y"][0],
-    )),
-    "XOR" | "$_XOR_" => Cell::Xor(Xor::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["Y"][0],
-    )),
-    "XNOR" | "$_XNOR_" => Cell::Xnor(Xnor::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["Y"][0],
-    )),
-    "ANDNOT" | "$_ANDNOT_" => Cell::AndNot(AndNot::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["Y"][0],
-    )),
-    "ORNOT" | "$_ORNOT_" => Cell::OrNot(OrNot::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["Y"][0],
-    )),
-    "$_MUX_" => Cell::Mux2(Mux2::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["S"][0],
-      connections["Y"][0],
-    )),
-    "$_NMUX_" => Cell::NMux2(NMux2::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["S"][0],
-      connections["Y"][0],
-    )),
-    "$_AOI3_" => Cell::AndOrInvert(AndOrInvert::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["C"][0],
-      connections["Y"][0],
-    )),
-    "$_OAI3_ " => Cell::OrAndInvert(OrAndInvert::new(
-      connections["A"][0],
-      connections["B"][0],
-      connections["C"][0],
-      connections["Y"][0],
-    )),
-    "DFF" | "$_DFF_P_" => Cell::Dff(Dff::new(
-      Bit::ONE,
-      connections["C"][0],
-      connections["D"][0],
-      connections["Q"][0],
-    )),
-    "$_SDFF_PP0_ " => Cell::DffReset(DffReset::new(
-      Bit::ONE,
-      Bit::ONE,
-      Bit::ZERO,
-      connections["C"][0],
-      connections["R"][0],
-      connections["D"][0],
-      connections["Q"][0],
-    )),
-    // Sim lib
-    "$not" => Cell::Not(Not::new(
-      parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$pos" => Cell::Pos(Pos::new(
-      parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$neg" => Cell::Neg(Neg::new(
-      parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$add" => Cell::Add(Add::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$sub" => Cell::Sub(Sub::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$mul" => Cell::Mul(Mul::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$div" => Cell::Div(Div::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$mod" => Cell::Modulus(Modulus::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$le" => Cell::Le(Le::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$ge" => Cell::Ge(Ge::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$gt" => Cell::Gt(Gt::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$shl" => Cell::Shl(Shl::new(
-      parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$shr" => Cell::Shr(Shr::new(
-      parameters["A_SIGNED"] != 0,
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$dff" => Cell::Reg(Reg::new(
-      (parameters["CLK_POLARITY"] != 0).into(),
-      connections["CLK"][0],
-      connections["D"].clone().into(),
-      connections["Q"].clone().into(),
-    )),
-    "$aldff" => Cell::ALDff(ALDff::new(
-      (parameters["CLK_POLARITY"] != 0).into(),
-      (parameters["ALOAD_POLARITY"] != 0).into(),
-      connections["CLK"][0],
-      connections["ALOAD"][0],
-      connections["AD"].clone().into(),
-      connections["D"].clone().into(),
-      connections["Q"].clone().into(),
-    )),
-    "$mux" => Cell::Mux(Mux::new(
-      connections["S"][0],
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$bmux" => Cell::BMux(BMux::new(
-      connections["S"].clone().into(),
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$pmux" => Cell::PMux(PMux::new(
-      connections["S"].clone().into(),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$logic_and" => Cell::LogicAnd(LogicAnd::new(
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$logic_not" => Cell::LogicNot(LogicNot::new(
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$reduce_or" | "$reduce_bool" => Cell::ReduceOr(ReduceOr::new(
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$reduce_and" => Cell::ReduceAnd(ReduceAnd::new(
-      connections["A"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$and" => Cell::ProcAnd(ProcAnd::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$or" => Cell::ProcOr(ProcOr::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$xor" => Cell::ProcXor(ProcXor::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$eq" => Cell::Eq(Eq::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    "$ne" => Cell::Ne(Ne::new(
-      (parameters["A_SIGNED"] != 0) && (parameters["B_SIGNED"] != 0),
-      connections["A"].clone().into(),
-      connections["B"].clone().into(),
-      connections["Y"].clone().into(),
-    )),
-    _ => return Err(CellError::Unsupported(cell.cell_type.to_string())),
+    (mapped_cell_type.as_str(), connections)
+  } else {
+    (cell_type, connections.clone())
   };
 
-  Ok(new_cell)
+  let ctor = CELL_DISPATCH
+    .get(cell_type)
+    .ok_or_else(|| CellError::Unsupported(cell_type.to_string()))?;
+
+  Ok(ctor(&connections, parameters))
 }

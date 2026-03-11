@@ -1,0 +1,30 @@
+[build-system]
+requires = ["maturin>=1.10,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "arbolta"
+dynamic = ["version"]
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "maturin>=1.10.2",
+    "networkx>=3.6.1",
+    "numpy>=2.3.5",
+]
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "src/**/*.rs" },
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.14.10",
+]

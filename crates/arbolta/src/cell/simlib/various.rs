@@ -4,11 +4,10 @@ use crate::{
   cell::simlib::bits_from_nets,
   signal::Signals,
 };
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
 pub struct Pos {
   signed: bool,
   a_nets: Box<[usize]>,
@@ -20,32 +19,34 @@ impl CellFn for Pos {
   fn eval(&mut self, signals: &mut Signals) {
     // Passthrough with padding
     let a = bits_from_nets_pad(self.signed, signals, &self.a_nets, self.y_nets.len());
-    copy_bits(signals, &self.y_nets, a);
+    copy_bits(signals, &self.y_nets, &a);
   }
 
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
 pub struct Mux {
-  select_net: usize,
-  a_nets: Box<[usize]>,
-  b_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
+  pub select_net: usize,
+  pub a_nets: Box<[usize]>,
+  pub b_nets: Box<[usize]>,
+  pub y_nets: Box<[usize]>,
 }
 
 impl CellFn for Mux {
   #[inline]
   fn eval(&mut self, signals: &mut Signals) {
-    let select = signals.get_net(self.select_net) == Bit::ONE;
-    let src_nets = if select { &self.b_nets } else { &self.a_nets };
+    let src_nets = match signals.get_net(self.select_net) {
+      Bit::ZERO => &self.a_nets,
+      Bit::ONE => &self.b_nets,
+    };
     copy_nets(signals, src_nets, &self.y_nets);
   }
 
   fn reset(&mut self) {}
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
 pub struct BMux {
   select_nets: Box<[usize]>,
   a_nets: Box<[usize]>,
@@ -71,7 +72,7 @@ impl CellFn for BMux {
 }
 // "Selects between 'slices' of B where each slice corresponds to a single bit
 // of S. Outputs A when all bits of S are low."
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Constructor)]
+#[derive(Debug, Clone, Serialize, Deserialize, Constructor)]
 pub struct PMux {
   select_nets: Box<[usize]>,
   a_nets: Box<[usize]>, // output when S all low
@@ -88,7 +89,7 @@ impl CellFn for PMux {
     // let src_nets = &self.a_nets;
     if select == 0 {
       let a = bits_from_nets(signals, &self.a_nets);
-      copy_bits(signals, &self.y_nets, a);
+      copy_bits(signals, &self.y_nets, &a);
     } else {
       let start_net = (select.ilog2() as usize) * self.y_nets.len();
       let end_net = start_net + self.y_nets.len();
@@ -106,6 +107,8 @@ impl CellFn for PMux {
 
 #[cfg(test)]
 mod tests {
+  use super::*;
+  use crate::cell::test_helpers::*;
   use rstest::rstest;
 
   #[rstest]
@@ -114,8 +117,26 @@ mod tests {
   }
 
   #[rstest]
-  fn mux() {
-    println!("TODO");
+  #[case(Bit::ZERO, "000", "001", "000")]
+  #[case(Bit::ONE, "000", "001", "001")]
+  #[case(Bit::ZERO, "111", "000", "111")]
+  #[case(Bit::ONE, "111", "000", "000")]
+  fn mux(#[case] select: Bit, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
+    let nets = allocate_nets(Some(1), &[&a, &b, &expected]);
+
+    let select_net: usize = 0;
+    let (a_nets, b_nets, y_nets) = (&nets[0], &nets[1], &nets[2]);
+    let mut signals = Signals::new(y_nets.last().unwrap() + 1);
+    let mut cell = Mux::new(select_net, a_nets.clone(), b_nets.clone(), y_nets.clone());
+
+    signals.set_net(select_net, select);
+    copy_bits(&mut signals, a_nets, &a);
+    copy_bits(&mut signals, b_nets, &b);
+
+    cell.eval(&mut signals);
+    let actual = BitVec::from(bits_from_nets(&mut signals, y_nets));
+
+    assert_eq!(actual, expected);
   }
 
   #[rstest]

@@ -11,7 +11,7 @@ fn test_signal_net_init() {
   assert_eq!(x.get_net(0), Bit::ZERO);
   assert_eq!(x.get_toggles_falling(0), 0);
   assert_eq!(x.get_toggles_rising(0), 0);
-  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_total(0), 0);
 }
 
 #[test]
@@ -27,13 +27,13 @@ fn test_signal_net_set_value() {
 fn test_signal_net_toggle_rising() {
   let mut x = Signals::new(1);
 
-  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_total(0), 0);
   assert_eq!(x.get_toggles_falling(0), 0);
   assert_eq!(x.get_toggles_rising(0), 0);
 
   x.set_net(0, Bit::ONE);
 
-  assert_eq!(x.get_total_toggles(0), 1);
+  assert_eq!(x.get_toggles_total(0), 1);
   assert_eq!(x.get_toggles_falling(0), 0);
   assert_eq!(x.get_toggles_rising(0), 1);
 }
@@ -43,13 +43,13 @@ fn test_signal_net_toggle_falling() {
   let mut x = Signals::new(1);
   x.nets[0] = Bit::ONE;
 
-  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_total(0), 0);
   assert_eq!(x.get_toggles_falling(0), 0);
   assert_eq!(x.get_toggles_rising(0), 0);
 
   x.set_net(0, Bit::ZERO);
 
-  assert_eq!(x.get_total_toggles(0), 1);
+  assert_eq!(x.get_toggles_total(0), 1);
   assert_eq!(x.get_toggles_falling(0), 1);
   assert_eq!(x.get_toggles_rising(0), 0);
 }
@@ -58,13 +58,13 @@ fn test_signal_net_toggle_falling() {
 fn test_signal_net_toggle_same_zero() {
   let mut x = Signals::new(1);
 
-  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_total(0), 0);
   assert_eq!(x.get_toggles_falling(0), 0);
   assert_eq!(x.get_toggles_rising(0), 0);
 
   x.set_net(0, Bit::ZERO);
 
-  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_total(0), 0);
   assert_eq!(x.get_toggles_falling(0), 0);
   assert_eq!(x.get_toggles_rising(0), 0);
 }
@@ -74,13 +74,13 @@ fn test_signal_net_toggle_same_one() {
   let mut x = Signals::new(1);
   x.nets[0] = Bit::ONE;
 
-  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_total(0), 0);
   assert_eq!(x.get_toggles_falling(0), 0);
   assert_eq!(x.get_toggles_rising(0), 0);
 
   x.set_net(0, Bit::ONE);
 
-  assert_eq!(x.get_total_toggles(0), 0);
+  assert_eq!(x.get_toggles_total(0), 0);
   assert_eq!(x.get_toggles_falling(0), 0);
   assert_eq!(x.get_toggles_rising(0), 0);
 }

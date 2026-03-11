@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::Result;
-use bincode::{Decode, Encode};
-use core::fmt;
 use derive_more::{BitAnd, BitOr, BitXor, Debug, IntoIterator, Not};
 use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingSub};
 use serde::{Deserialize, Serialize};
-use std::convert::{From, Into};
-use std::str::FromStr;
+use std::{
+  convert::{From, Into},
+  fmt,
+  str::FromStr,
+};
 use thiserror::Error;
 
 /// Primitive signal value
@@ -24,8 +25,6 @@ use thiserror::Error;
   derive_more::Into,
   Serialize,
   Default,
-  Encode,
-  Decode,
   BitAnd,
   BitOr,
   BitXor,
@@ -34,8 +33,11 @@ use thiserror::Error;
 pub struct Bit(#[debug("{}", if *_0 {"1"} else {"0"})] pub bool);
 
 #[derive(Debug, PartialEq, Eq, Error)]
-#[error("Couldn't convert `{0}`")]
-pub struct ParseBitError(char);
+#[error("Couldn't convert `{0}` to a Bit, must be 0 or 1")]
+pub enum ParseBitError {
+  Char(char),
+  Int(String), // Easier than using generics
+}
 
 impl Bit {
   pub const ZERO: Bit = Bit(false);
@@ -47,6 +49,16 @@ impl Bit {
       Self(true) => T::one(),
     }
   }
+
+  pub fn from_int<T: PrimInt + fmt::Display>(val: T) -> Result<Self, ParseBitError> {
+    if val == T::zero() {
+      Ok(Self::ZERO)
+    } else if val == T::one() {
+      Ok(Self::ONE)
+    } else {
+      Err(ParseBitError::Int(format!("{val}")))
+    }
+  }
 }
 
 impl TryFrom<char> for Bit {
@@ -55,7 +67,7 @@ impl TryFrom<char> for Bit {
     match val {
       '0' => Ok(Bit::ZERO),
       '1' => Ok(Bit::ONE),
-      _ => Err(ParseBitError(val)),
+      _ => Err(ParseBitError::Char(val)),
     }
   }
 }
@@ -99,6 +111,12 @@ impl From<Vec<Bit>> for BitVec {
   fn from(bits: Vec<Bit>) -> Self {
     let shape = [1, bits.len()];
     Self { bits, shape }
+  }
+}
+
+impl From<BitVec> for Vec<bool> {
+  fn from(value: BitVec) -> Self {
+    value.bits.iter().map(|&b| b.into()).collect()
   }
 }
 
@@ -157,6 +175,14 @@ impl FromIterator<bool> for BitVec {
 }
 
 impl BitVec {
+  pub fn len(&self) -> usize {
+    self.bits.len()
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.bits.is_empty()
+  }
+
   /// Create from int.
   ///
   /// # Arguments

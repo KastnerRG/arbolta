@@ -1,58 +1,26 @@
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
-use bincode::{Decode, Encode};
 use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 use std::ops::Rem;
 
-define_arithmetic_cell!(Add, wrapping_add);
-define_arithmetic_cell!(Sub, wrapping_sub);
-define_arithmetic_cell!(Mul, wrapping_mul);
-define_arithmetic_cell!(Div, wrapping_div);
-define_arithmetic_cell!(Modulus, rem);
-define_arithmetic_cell!(Le, &lt);
-define_arithmetic_cell!(Gt, &gt);
-define_arithmetic_cell!(Ge, &ge);
-
-#[derive(Debug, Clone, Constructor, Serialize, Deserialize, Encode, Decode)]
-pub struct Neg {
-  signed: bool,
-  a_nets: Box<[usize]>,
-  y_nets: Box<[usize]>,
-}
-
-impl CellFn for Neg {
-  #[inline]
-  fn eval(&mut self, signals: &mut Signals) {
-    let a = BitVec::from(bits_from_nets(signals, &self.a_nets));
-    let output_size = self.y_nets.len();
-
-    let y: BitVec = if output_size <= 64 {
-      let a = -a.to_int::<i64>();
-      if self.signed {
-        BitVec::from_int(a, Some(output_size))
-      } else {
-        BitVec::from_int(a as u64, Some(output_size))
-      }
-    } else {
-      let a = -a.to_int::<i128>();
-      if self.signed {
-        BitVec::from_int(a, Some(output_size))
-      } else {
-        BitVec::from_int(a as u128, Some(output_size))
-      }
-    };
-
-    copy_bits(signals, &self.y_nets, y);
-  }
-
-  fn reset(&mut self) {}
-}
+define_arithmetic_cell!(&["$add"], Add { a, b }, y, a.wrapping_add(b));
+define_arithmetic_cell!(&["$div"], Div { a, b }, y, a.wrapping_div(b));
+define_arithmetic_cell!(&["$eq"], Equal { a, b }, y, a.eq(&b));
+define_arithmetic_cell!(&["$ge"], GreaterEqual { a, b }, y, a.ge(&b));
+define_arithmetic_cell!(&["$gt"], GreaterThan { a, b }, y, a.gt(&b));
+define_arithmetic_cell!(&["$le"], LessEqual { a, b }, y, a.le(&b));
+define_arithmetic_cell!(&["$lt"], LessThan { a, b }, y, a.lt(&b));
+define_arithmetic_cell!(&["$mod"], Modulus { a, b }, y, a.rem(b));
+define_arithmetic_cell!(&["$mul"], Mul { a, b }, y, a.wrapping_mul(b));
+define_arithmetic_cell!(&["$neg"], Negate { a }, y, a.wrapping_neg());
+define_arithmetic_cell!(&["$ne"], NotEqual { a, b }, y, a.ne(&b));
+define_arithmetic_cell!(&["$sub"], Sub { a, b }, y, a.wrapping_sub(b));
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::cell::test_macros::*;
+  use crate::cell::test_helpers::*;
   use rstest::rstest;
 
   #[rstest]
@@ -78,11 +46,72 @@ mod tests {
   #[case(true, "1", "1", "111111111110")] // -1 + -1 = -2
   #[case(true, "01", "1", "000000000000")] // 1 + -1 = 0
   fn add(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
-    run_binary_cell_case!(Add, signed, a, b, expected);
+    run_binary_cell_case_signed!(Add, signed, a, b, expected);
   }
 
   #[rstest]
-  fn sub() {
+  fn div() {
+    println!("TODO")
+  }
+
+  #[rstest]
+  fn equal() {
+    println!("TODO")
+  }
+
+  #[rstest]
+  #[case::zero_unsigned(false, "0000", "0000", "0001")] // 0 >= 0
+  #[case::zero_signed(true, "0000", "0000", "0001")] // 0 >= 0
+  #[case(false, "0000", "1111", "0000")] // 0 >= 15
+  #[case(true, "0000", "1111", "0001")] // 0 >= -1
+  #[case(false, "0111", "000011", "0001")] // 7 >= 3
+  #[case(true, "0111", "000011", "0001")] // 7 >= 3
+  fn greater_equal(
+    #[case] signed: bool,
+    #[case] a: BitVec,
+    #[case] b: BitVec,
+    #[case] expected: BitVec,
+  ) {
+    run_binary_cell_case_signed!(GreaterEqual, signed, a, b, expected);
+  }
+
+  #[rstest]
+  fn greater_than() {
+    println!("TODO")
+  }
+
+  #[rstest]
+  #[case::zero_unsigned(false, "0000", "0000", "1")]
+  #[case::zero_signed(true, "0000", "0000", "1")]
+  // 37738 < 4365 = 0
+  #[case::unsigned_normal(false, "1001001101101010", "0001000100001101", "0")]
+  #[case::signed_normal(true, "1001001101101010", "0001000100001101", "1")]
+  #[case::unsigned_equal(false, "101010", "00101010", "1")]
+  fn less_equal(
+    #[case] signed: bool,
+    #[case] a: BitVec,
+    #[case] b: BitVec,
+    #[case] expected: BitVec,
+  ) {
+    run_binary_cell_case_signed!(LessEqual, signed, a, b, expected);
+  }
+
+  #[rstest]
+  // 37738 < 4365 = 0
+  #[case::unsigned_normal(false, "1001001101101010", "0001000100001101", "0")]
+  #[case::signed_normal(true, "1001001101101010", "0001000100001101", "1")]
+  #[case::unsigned_equal(false, "101010", "00101010", "0")]
+  fn less_than(
+    #[case] signed: bool,
+    #[case] a: BitVec,
+    #[case] b: BitVec,
+    #[case] expected: BitVec,
+  ) {
+    run_binary_cell_case_signed!(LessThan, signed, a, b, expected);
+  }
+
+  #[rstest]
+  fn modulus() {
     println!("TODO")
   }
 
@@ -101,35 +130,7 @@ mod tests {
   // 37738 + 4365 = 99938
   #[case::unsigned_overflow(false, "1001001101101010", "0001000100001101", "00011000011001100010")]
   fn mul(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
-    run_binary_cell_case!(Mul, signed, a, b, expected);
-  }
-
-  #[rstest]
-  fn div() {
-    println!("TODO")
-  }
-
-  #[rstest]
-  fn modulus() {
-    println!("TODO")
-  }
-
-  #[rstest]
-  // 37738 < 4365 = 0
-  #[case::unsigned_normal(false, "1001001101101010", "0001000100001101", "0")]
-  #[case::signed_normal(true, "1001001101101010", "0001000100001101", "1")]
-  fn le(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec) {
-    run_binary_cell_case!(Le, signed, a, b, expected);
-  }
-
-  #[rstest]
-  fn ge() {
-    println!("TODO")
-  }
-
-  #[rstest]
-  fn gt() {
-    println!("TODO")
+    run_binary_cell_case_signed!(Mul, signed, a, b, expected);
   }
 
   #[rstest]
@@ -139,7 +140,16 @@ mod tests {
   #[case::signed_normal(true, "001001001101101010", "11110110110010010110")]
   // -(-27798) = 27798
   #[case::signed_normal(true, "1001001101101010", "0110110010010110")]
-  fn neg(#[case] signed: bool, #[case] a: BitVec, #[case] expected: BitVec) {
-    run_unary_cell_case_signed!(Neg, signed, a, expected);
+  fn negate(#[case] signed: bool, #[case] a: BitVec, #[case] expected: BitVec) {
+    run_unary_cell_case_signed!(Negate, signed, a, expected);
+  }
+
+  #[rstest]
+  fn not_equal() {
+    println!("TODO")
+  }
+  #[rstest]
+  fn sub() {
+    println!("TODO")
   }
 }

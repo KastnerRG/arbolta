@@ -3,57 +3,58 @@
 
 use crate::{
   bit::{Bit, BitVec},
-  cell::{Cell, CellError, CellFn, create_cell},
-  port::PortError,
-  port::{Port, PortDirection, parse_bit},
+  cell::{Cell, CellError, CellFn, CellMapping},
+  netlist_wrapper::NetlistWrapper,
+  port::{Port, PortDirection, PortError},
   signal::Signals,
+  yosys::{Netlist, TopoOrder},
 };
-use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Debug};
 use thiserror::Error;
-use yosys_netlist_json as yosys_json;
 
-pub type PortMap = HashMap<String, Port>;
-pub type SignalMap = HashMap<String, Box<[usize]>>;
-pub type SubmoduleMap = HashMap<String, Vec<String>>; // TODO: Change to box?
-
-#[derive(Default, Clone, Debug, Deserialize, Serialize, Decode, Encode)]
+#[derive(Default, Clone, Debug, Deserialize, Serialize)] //Decode, Encode
 pub struct HardwareModule {
-  pub name: String,
-  pub ports: PortMap,
-  pub signal_map: SignalMap,
+  pub netlist: NetlistWrapper,
   pub signals: Signals,
-  pub cell_info: HashMap<String, String>,
   pub cells: Box<[Cell]>,
-  pub submodules: SubmoduleMap,        // (name, netnames)
+  pub ports: HashMap<String, Port>,
   pub clock_net: Option<(usize, Bit)>, // (net, polarity)
   pub reset_net: Option<(usize, Bit)>, // (net, polarity)
 }
 
+// TODO: Refactor these
 #[derive(Debug, Error)]
 pub enum ModuleError {
-  #[error("Module is not flattened or empty")]
-  UnFlattened,
-  #[error("Missing top module `{0}`")]
-  TopModule(String),
+  #[error("Missing top module")]
+  TopModule,
+  #[error("Cell `{0}` doesn't exist")]
+  MissingCell(String),
+  #[error("No modules given")]
+  MissingModule,
   #[error("Module `{0}` missing from topological order")]
   TopoOrder(String),
-  #[error("Cell error `{0}`")]
+  #[error(transparent)]
   Cell(#[from] CellError),
-  #[error("Port error `{0}`")]
+  #[error(transparent)]
   Port(#[from] PortError),
+  #[error("No reset configured")]
+  MissingReset,
+  #[error("No clock configured")]
+  MissingClock,
   #[error("Signal `{0}` doesn't exist")]
   MissingSignal(String),
   #[error("Net `{0}` doesn't exist")]
   MissingNet(usize),
   #[error("Port `{0}` doesn't exist")]
   MissingPort(String),
-  #[error("Submodule `{0}` doesn't exist")]
-  MissingSubmodule(String),
+  #[error(transparent)]
+  Netlist(#[from] serde_json::Error),
+  #[error("Signal cannot be configured as both a reset and clock")]
+  DoubleAssign,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub enum ToggleCount {
   Rising,
   Falling,
@@ -61,113 +62,90 @@ pub enum ToggleCount {
 }
 
 impl HardwareModule {
-  // TODO: Fix
-  #[allow(unused)]
-  pub fn load(path: &str) -> anyhow::Result<Self> {
-    todo!()
-  }
-
-  #[allow(unused)]
-  pub fn save(&self, path: &str) -> anyhow::Result<()> {
-    todo!()
-  }
-
   pub fn new(
-    netlist: &yosys_json::Netlist,
-    topo_order: &HashMap<String, Vec<String>>,
-    top_module: &str,
-  ) -> Result<Self, ModuleError> {
-    // Check that top module exists
-    let Some(synth_module) = netlist.modules.get(top_module) else {
-      return Err(ModuleError::TopModule(top_module.to_string()));
-    };
+    netlist: Netlist,
+    top_module: Option<&str>,
+    torder: TopoOrder,
+    hierarchy_separator: Option<&str>,
+    cell_mapping: Option<&CellMapping>,
+  ) -> Result<HardwareModule, ModuleError> {
+    let netlist = NetlistWrapper::new(netlist, top_module, torder, hierarchy_separator)?;
 
-    let mut cells = vec![];
-    let mut cell_info: HashMap<String, String> = HashMap::new();
-    let Some(module_torder) = topo_order.get(top_module) else {
-      return Err(ModuleError::TopoOrder(top_module.to_string()));
-    };
+    let cells = netlist.build_cells(cell_mapping)?;
 
-    for cell_name in module_torder.iter().rev() {
-      // $scopeinfo not in torder
+    let global_net_max: usize = netlist
+      .nets
+      .values()
+      .flatten()
+      .fold(0, |max, &x| std::cmp::max(max, x));
 
-      let Some(synth_cell) = synth_module.cells.get(cell_name) else {
-        return Err(CellError::NotFound(cell_name.to_string()).into());
-      };
-
-      let cell = create_cell(synth_cell)?;
-      cells.push(cell);
-      cell_info.insert(cell_name.to_string(), synth_cell.cell_type.to_string());
-    }
-
-    let mut signal_map = SignalMap::new();
-    let mut max_signal = 0;
-    for (name, netname) in &synth_module.netnames {
-      let mut nets = vec![];
-      for bit in &netname.bits {
-        let net = parse_bit(bit)?;
-        max_signal = max_signal.max(net);
-        nets.push(net);
-      }
-      signal_map.insert(name.to_string(), nets.into_boxed_slice());
-    }
-
-    let mut ports = PortMap::new();
-    for (name, port) in &synth_module.ports {
-      ports.insert(name.clone(), Port::new(port)?);
-    }
-    // Temp?
-    let mut submodules = SubmoduleMap::default();
-    for (name, netname) in &synth_module.netnames {
-      if ports.contains_key(name) {
-        continue;
-      }
-
-      let port = yosys_json::Port {
-        direction: yosys_json::PortDirection::Output,
-        bits: netname.bits.clone(),
-        offset: Default::default(),
-        upto: Default::default(),
-        signed: Default::default(),
-      };
-
-      ports.insert(name.clone(), Port::new(&port)?);
-
-      // Check if net belongs to scopeinfo cell
-      let split = name.split(".").collect::<Vec<&str>>();
-      if let Some(&scope_name) = split.first()
-        && let Some(cell) = synth_module.cells.get(scope_name)
-        && cell.cell_type == "$scopeinfo"
-      {
-        submodules
-          .entry(scope_name.to_string())
-          .or_default()
-          .push(name.to_string());
-      }
-    }
-
-    let mut signals = Signals::new(max_signal + 1);
+    let mut signals = Signals::new(global_net_max + 1);
     signals.set_constant(0, Bit::ZERO);
     signals.set_constant(1, Bit::ONE);
 
+    // type doesn't matter here...
+    let ports = netlist.find_module_ports::<&str>(None)?;
+
     Ok(Self {
-      name: top_module.to_string(),
-      ports,
-      signal_map,
+      netlist,
       signals,
-      cell_info,
-      cells: cells.into_boxed_slice(),
-      submodules,
-      clock_net: None,
-      reset_net: None,
+      cells: cells.into(),
+      ports,
+      ..Default::default()
     })
   }
 
-  pub fn get_signal_nets(&self, name: &str) -> Result<Box<[usize]>, ModuleError> {
-    match self.signal_map.get(name) {
-      Some(net) => Ok(net.clone()),
-      None => Err(ModuleError::MissingSignal(name.to_string())),
+  pub fn reset(&mut self) {
+    self.cells.iter_mut().for_each(|c| c.reset());
+    self.signals.reset();
+    self.signals.set_constant(0, Bit::ZERO);
+    self.signals.set_constant(1, Bit::ONE);
+  }
+
+  // Eval until all signals have settled
+  pub fn eval(&mut self) {
+    loop {
+      self.signals.clear_dirty();
+      self
+        .cells
+        .iter_mut()
+        .for_each(|cell| cell.eval(&mut self.signals));
+
+      if !self.signals.is_dirty() {
+        break;
+      }
     }
+  }
+
+  pub fn eval_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
+    let Some((clock_net, polarity)) = self.clock_net else {
+      return Err(ModuleError::MissingClock);
+    };
+
+    let cycles = cycles.unwrap_or(1);
+
+    for _ in 0..cycles {
+      self.eval();
+      self.signals.set_net(clock_net, polarity);
+      self.eval();
+      self.signals.set_net(clock_net, !polarity);
+      self.eval();
+    }
+
+    Ok(())
+  }
+
+  pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
+    let Some((reset_net, polarity)) = self.reset_net else {
+      return Err(ModuleError::MissingReset);
+    };
+
+    self.signals.set_net(reset_net, polarity);
+    self.eval_clocked(cycles)?;
+    self.signals.set_net(reset_net, !polarity);
+    self.eval();
+
+    Ok(())
   }
 
   pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
@@ -188,9 +166,32 @@ impl HardwareModule {
     }
   }
 
+  // TODO: Fix
+  pub fn get_net_bits(&self, name: &str) -> Result<BitVec, ModuleError> {
+    let Some(nets) = self.get_net(name) else {
+      return Err(ModuleError::MissingPort(name.to_string()));
+    };
+
+    let bits: BitVec = nets
+      .iter()
+      .map(|idx| self.signals.get_net(*idx))
+      .collect::<Vec<Bit>>()
+      .into();
+
+    Ok(bits)
+  }
+
+  pub fn get_net(&self, name: &str) -> Option<&[usize]> {
+    self.netlist.names_to_nets.get(name).map(|v| &**v)
+  }
+
   pub fn set_clock(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
     if net >= self.signals.size {
       Err(ModuleError::MissingNet(net))
+    } else if let Some((reset_net, _)) = self.reset_net
+      && reset_net == net
+    {
+      Err(ModuleError::DoubleAssign)
     } else {
       self.clock_net = Some((net, polarity));
       Ok(())
@@ -200,67 +201,14 @@ impl HardwareModule {
   pub fn set_reset(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
     if net >= self.signals.size {
       Err(ModuleError::MissingNet(net))
+    } else if let Some((clock_net, _)) = self.clock_net
+      && clock_net == net
+    {
+      Err(ModuleError::DoubleAssign)
     } else {
       self.reset_net = Some((net, polarity));
       Ok(())
     }
-  }
-
-  // Eval until all signals have settled
-  // TODO: Make this more efficient
-  pub fn eval(&mut self) {
-    loop {
-      let before = self.signals.nets.clone();
-
-      self
-        .cells
-        .iter_mut()
-        .for_each(|cell| cell.eval(&mut self.signals));
-
-      let after = self.signals.nets.clone();
-
-      if before == after {
-        break;
-      }
-    }
-  }
-
-  pub fn eval_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
-    let Some((clock_net, polarity)) = self.clock_net else {
-      return Err(ModuleError::MissingSignal("clock".to_string()));
-    };
-
-    let cycles = cycles.unwrap_or(1);
-
-    for _ in 0..cycles {
-      self.eval();
-      self.signals.set_net(clock_net, polarity);
-      self.eval();
-      self.signals.set_net(clock_net, !polarity);
-      self.eval();
-    }
-
-    Ok(())
-  }
-
-  pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
-    let Some((reset_net, polarity)) = self.reset_net else {
-      return Err(ModuleError::MissingSignal("reset".to_string()));
-    };
-
-    self.signals.set_net(reset_net, polarity);
-    self.eval_clocked(cycles)?;
-    self.signals.set_net(reset_net, !polarity);
-    self.eval();
-
-    Ok(())
-  }
-
-  pub fn reset(&mut self) {
-    self.cells.iter_mut().for_each(|c| c.reset());
-    self.signals.reset();
-    self.signals.set_constant(0, Bit::ZERO);
-    self.signals.set_constant(1, Bit::ONE);
   }
 
   pub fn set_port_shape(&mut self, name: &str, shape: &[usize; 2]) -> Result<(), ModuleError> {
@@ -285,12 +233,11 @@ impl HardwareModule {
   }
 
   pub fn get_port(&self, name: &str) -> Result<BitVec, ModuleError> {
-    let Some(port) = self.ports.get(name) else {
+    let (Some(port), Some(nets)) = (self.ports.get(name), self.get_net(name)) else {
       return Err(ModuleError::MissingPort(name.to_string()));
     };
 
-    let mut bits: BitVec = port
-      .nets
+    let mut bits: BitVec = nets
       .iter()
       .map(|idx| self.signals.get_net(*idx))
       .collect::<Vec<Bit>>()
@@ -305,12 +252,12 @@ impl HardwareModule {
     I: IntoIterator<Item = B>,
     B: Into<Bit>,
   {
-    let Some(port) = self.ports.get(name) else {
+    let (Some(_port), Some(nets)) = (self.ports.get(name), self.get_net(name)) else {
       return Err(ModuleError::MissingPort(name.to_string()));
     };
 
-    port
-      .nets
+    nets
+      .to_owned()
       .iter()
       .zip(vals.into_iter().map(Into::into))
       .for_each(|(net, b)| self.signals.set_net(*net, b));
@@ -318,57 +265,79 @@ impl HardwareModule {
     Ok(())
   }
 
-  // pub fn get_cell_breakdown(&self) -> HashMap<String, usize> {
-  //   todo!()
-  // }
+  // Returns ALL nets in design
+  pub fn get_submodule_nets(&self) -> HashMap<&Vec<String>, HashMap<&str, &[usize]>> {
+    let mut global_module_nets = HashMap::new();
+    for (net_id, nets) in &self.netlist.nets {
+      let module_nets: &mut HashMap<&str, &[usize]> =
+        global_module_nets.entry(&net_id.parents).or_default();
 
-  // #[allow(unused_variables)]
-  // pub fn search_module_cell_breakdown(
-  //   &self,
-  //   name: &str,
-  // ) -> Result<HashMap<String, usize>, ModuleError> {
-  //   todo!()
-  // }
-
-  // TODO: Add tests for these
-
-  pub fn get_toggles(&self, category: ToggleCount) -> u64 {
-    let mut total: u64 = 0;
-    (0..self.signals.size).for_each(|i| {
-      total += match category {
-        ToggleCount::Falling => self.signals.get_toggles_falling(i),
-        ToggleCount::Rising => self.signals.get_toggles_rising(i),
-        ToggleCount::Total => self.signals.get_total_toggles(i),
-      }
-    });
-    total
-  }
-
-  pub fn get_submodule_toggles(
-    &self,
-    name: &str,
-    category: ToggleCount,
-  ) -> Result<u64, ModuleError> {
-    let Some(net_names) = self.submodules.get(name) else {
-      return Err(ModuleError::MissingSubmodule(name.to_string()));
-    };
-
-    let mut total: u64 = 0;
-    for name in net_names {
-      self.ports[name].nets.iter().for_each(|&n| {
-        total += match category {
-          ToggleCount::Falling => self.signals.get_toggles_falling(n),
-          ToggleCount::Rising => self.signals.get_toggles_rising(n),
-          ToggleCount::Total => self.signals.get_total_toggles(n),
-        }
-      });
+      module_nets.insert(&net_id.name, nets);
     }
 
-    Ok(total)
+    global_module_nets
   }
 
-  // #[allow(unused_variables)]
-  // pub fn search_module_total_toggle_count(&self, name: &str) -> Result<usize, ModuleError> {
-  //   todo!()
-  // }
+  pub fn get_submodule_net_values(&self) -> HashMap<&Vec<String>, HashMap<&str, BitVec>> {
+    let global_submodule_nets = self.get_submodule_nets();
+    let mut global_net_values = HashMap::new();
+
+    for (parents, module_nets) in global_submodule_nets {
+      let submodule_net_values: &mut HashMap<&str, BitVec> =
+        global_net_values.entry(parents).or_default();
+
+      for (net_name, nets) in module_nets {
+        let bits: BitVec = nets
+          .iter()
+          .map(|idx| self.signals.get_net(*idx))
+          .collect::<Vec<Bit>>()
+          .into();
+
+        submodule_net_values.insert(net_name, bits);
+      }
+    }
+
+    global_net_values
+  }
+
+  pub fn get_submodule_toggles_by_net(
+    &self,
+    category: ToggleCount,
+  ) -> HashMap<&Vec<String>, HashMap<&str, u64>> {
+    let global_submodule_nets = self.get_submodule_nets();
+
+    let toggle_fn = match category {
+      ToggleCount::Falling => Signals::get_toggles_falling,
+      ToggleCount::Rising => Signals::get_toggles_rising,
+      ToggleCount::Total => Signals::get_toggles_total,
+    };
+
+    let mut global_submodule_toggles = HashMap::new();
+    for (parents, module_nets) in global_submodule_nets {
+      let submodule_toggles: &mut HashMap<&str, u64> =
+        global_submodule_toggles.entry(parents).or_default();
+
+      for (net_name, nets) in module_nets {
+        let toggles = nets
+          .iter()
+          .fold(0, |acc, &n| acc + toggle_fn(&self.signals, n));
+
+        submodule_toggles.insert(net_name, toggles);
+      }
+    }
+
+    global_submodule_toggles
+  }
+
+  pub fn get_submodule_toggles_total(&self, category: ToggleCount) -> HashMap<&Vec<String>, u64> {
+    let submodule_toggles_by_net = self.get_submodule_toggles_by_net(category);
+    let mut submodule_toggles = HashMap::new();
+
+    for (parents, module_nets) in submodule_toggles_by_net {
+      let total_toggles = module_nets.values().sum();
+      submodule_toggles.insert(parents, total_toggles);
+    }
+
+    submodule_toggles
+  }
 }

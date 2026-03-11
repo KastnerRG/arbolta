@@ -1,8 +1,11 @@
 [package]
 name = "arbolta_pyo3"
 version = "0.1.0"
-authors = ["Alexander Redding"]
-edition = "2024"
+authors = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+readme = "../../README.md"
 
 [lib]
 name = "arbolta"

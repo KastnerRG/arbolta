@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Alexander Redding
+# SPDX-License-Identifier: MIT
+
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path

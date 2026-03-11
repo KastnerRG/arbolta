@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
 use derive_more::Constructor;

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use crate::{
   cell::{Cell, CellMapping, create_cell},
   hardware_module::ModuleError,

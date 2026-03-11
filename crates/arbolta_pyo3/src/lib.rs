@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use pyo3::prelude::*;
 mod conversion;
 mod hardware_module;

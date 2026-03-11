@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use super::CellFn;
 use crate::{bit::Bit, cell::CellRegistration, signal::Signals};
 use derive_more::Constructor;

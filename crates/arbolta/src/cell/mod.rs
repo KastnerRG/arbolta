@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 mod simcells;
 mod simlib;
 mod test_helpers;

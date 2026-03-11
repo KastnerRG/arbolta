@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 // Re-export
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt};

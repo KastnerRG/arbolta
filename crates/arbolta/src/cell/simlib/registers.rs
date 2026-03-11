@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use super::{CellFn, copy_nets};
 use crate::{bit::Bit, cell::simlib::copy_bits, signal::Signals};
 use serde::{Deserialize, Serialize};

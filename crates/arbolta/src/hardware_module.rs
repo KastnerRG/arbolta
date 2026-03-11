@@ -1,4 +1,5 @@
-// Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+// Copyright (c) 2024 Advanced Micro Devices, Inc.
+// Copyright (c) 2026 Alexander Redding
 // SPDX-License-Identifier: MIT
 
 use crate::{

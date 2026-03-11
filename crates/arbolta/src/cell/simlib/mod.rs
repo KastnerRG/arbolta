@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use super::{Cell, CellFn, CellRegistration};
 use crate::{
   bit::{Bit, BitVec},

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use std::ops::{BitAnd, BitOr, BitXor};
 
 use super::*;

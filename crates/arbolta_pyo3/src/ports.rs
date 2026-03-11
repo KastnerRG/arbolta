@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use crate::hardware_module::HardwareDesign;
 use arbolta::{bit::Bit, port::PortDirection};
 use pyo3::{

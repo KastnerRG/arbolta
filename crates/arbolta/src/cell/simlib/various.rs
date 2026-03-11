@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
 use super::{CellFn, bits_from_nets_pad, copy_bits, copy_nets};
 use crate::{
   bit::{Bit, BitVec},

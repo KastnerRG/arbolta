@@ -164,7 +164,8 @@ pub enum Cell {
   NotEqual,
   Sub,
   //
-  ALDff,
+  DffAsyncLoad,
+  DffAsyncResetEnable,
   BMux,
   LogicAnd,
   LogicNot,

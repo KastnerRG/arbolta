@@ -1,5 +1,8 @@
 use super::{Cell, CellFn, CellRegistration};
-use crate::{bit::Bit, signal::Signals};
+use crate::{
+  bit::{Bit, BitVec},
+  signal::Signals,
+};
 use paste::paste;
 use std::{collections::BTreeMap, env};
 mod arithmetic;
@@ -178,12 +181,32 @@ fn make_aldff(
   connections: &BTreeMap<&str, Box<[usize]>>,
   parameters: &BTreeMap<&str, usize>,
 ) -> Cell {
-  ALDff::new(
+  DffAsyncLoad::new(
     (parameters["CLK_POLARITY"] != 0).into(),
     (parameters["ALOAD_POLARITY"] != 0).into(),
     connections["CLK"][0],
     connections["ALOAD"][0],
     connections["AD"].clone(),
+    connections["D"].clone(),
+    connections["Q"].clone(),
+  )
+  .into()
+}
+
+fn make_adffe(
+  connections: &BTreeMap<&str, Box<[usize]>>,
+  parameters: &BTreeMap<&str, usize>,
+) -> Cell {
+  let reset_val = BitVec::from_int(parameters["ARST_VALUE"], Some(parameters["WIDTH"]));
+
+  DffAsyncResetEnable::new(
+    (parameters["CLK_POLARITY"] != 0).into(),
+    (parameters["EN_POLARITY"] != 0).into(),
+    (parameters["ARST_POLARITY"] != 0).into(),
+    reset_val.bits.into(),
+    connections["CLK"][0],
+    connections["ARST"][0],
+    connections["EN"][0],
     connections["D"].clone(),
     connections["Q"].clone(),
   )
@@ -232,6 +255,7 @@ inventory::submit! {CellRegistration::new(&["$not"], make_not)}
 inventory::submit! {CellRegistration::new(&["$pos"], make_pos)}
 inventory::submit! {CellRegistration::new(&["$dff"], make_dff)}
 inventory::submit! {CellRegistration::new(&["$aldff"], make_aldff)}
+inventory::submit! {CellRegistration::new(&["$adffe"], make_adffe)}
 inventory::submit! {CellRegistration::new(&["$mux"], make_mux)}
 inventory::submit! {CellRegistration::new(&["$bmux"], make_bmux)}
 inventory::submit! {CellRegistration::new(&["$pmux"], make_pmux)}

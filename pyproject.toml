@@ -23,22 +23,28 @@ dependencies = [
     "numpy>=2.3.5",
 ]
 
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "ruff>=0.14.10",
+]
+
 [project.urls]
 Repository = "https://github.com/KastnerRG/arbolta"
 
 [tool.maturin]
 manifest-path = "crates/arbolta_pyo3/Cargo.toml"
 strip = true
+python-source = "python/py_src"
+exclude = [
+    "python/tests/*",
+]
 
 [tool.uv]
+package = true
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },
     { file = "src/**/*.rs" },
-]
-
-[dependency-groups]
-dev = [
-    "pre-commit>=4.5.1",
-    "ruff>=0.14.10",
 ]

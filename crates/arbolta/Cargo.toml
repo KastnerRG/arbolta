@@ -6,6 +6,10 @@ edition = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
+description = "Core Arbolta hardware simulator"
+exclude = [
+    "tests/*"
+]
 
 [dependencies]
 anyhow = { workspace = true }

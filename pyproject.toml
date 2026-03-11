@@ -5,6 +5,7 @@ build-backend = "maturin"
 [project]
 name = "arbolta"
 dynamic = ["version"]
+description = "A hardware simulator for efficient HW/SW co-design"
 authors = [
     { name = "Alexander Redding", email = "alredding@ucsd.edu" },
 ]
@@ -12,6 +13,10 @@ readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
 license-files = ["LICENSE"]
+classifiers = [
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",  # for compatibility with tooling such as pip-licenses
+]
 dependencies = [
     "maturin>=1.10.2",
     "networkx>=3.6.1",

@@ -1,0 +1,57 @@
+[build-system]
+requires = ["maturin>=1.10,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "arbolta"
+dynamic = ["version"]
+description = "A hardware simulator for efficient HW/SW co-design"
+authors = [
+    { name = "Alexander Redding", email = "alredding@ucsd.edu" },
+]
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+dependencies = [
+    "maturin>=1.10.2",
+    "networkx>=3.6.1",
+    "numpy>=2.3.5",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "ruff>=0.14.10",
+]
+
+[project.urls]
+Repository = "https://github.com/KastnerRG/arbolta"
+
+[tool.maturin]
+manifest-path = "crates/arbolta_pyo3/Cargo.toml"
+strip = true
+python-source = "python/py_src"
+exclude = [
+    "python/tests/*",
+    "examples/*", # Shouldn't get included but just in-case
+]
+
+[tool.uv]
+package = true
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "src/**/*.rs" },
+]

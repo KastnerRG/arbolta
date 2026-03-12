@@ -1,0 +1,361 @@
+// Copyright (c) 2024 Advanced Micro Devices, Inc.
+// Copyright (c) 2026 Alexander Redding
+// SPDX-License-Identifier: MIT
+
+use crate::conversion::{
+  bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits,
+};
+use crate::ports::{PortConfig, Ports};
+use arbolta::{
+  bit::Bit,
+  cell::CellMapping,
+  hardware_module::{HardwareModule, ToggleCount},
+  port::{PortDirection, parse_bit},
+  yosys::{Netlist, parse_torder},
+};
+use petgraph::visit::EdgeRef;
+use pyo3::{
+  exceptions::{PyAttributeError, PyValueError},
+  prelude::*,
+  types::{PyDict, PyList},
+};
+use serde::{Deserialize, Serialize};
+use std::{
+  collections::{HashMap, HashSet},
+  path::PathBuf,
+};
+
+#[pyclass(weakref, dict)]
+#[derive(Deserialize, Serialize)]
+pub struct HardwareDesign {
+  pub module: HardwareModule,
+}
+
+impl HardwareDesign {
+  fn new_base(
+    netlist_path: PathBuf,
+    top_module: Option<&str>,
+    torder_path: PathBuf,
+    hierarchy_separator: Option<&str>,
+    cell_mapping: Option<&CellMapping>,
+  ) -> anyhow::Result<Self> {
+    // Read raw JSON netlist
+    let raw_netlist = std::fs::read(netlist_path)?;
+    let netlist = Netlist::from_slice(&raw_netlist)?;
+
+    // Read raw torder
+    let raw_torder = std::fs::read_to_string(torder_path)?;
+    let torder = parse_torder(&raw_torder);
+
+    let module = HardwareModule::new(
+      netlist,
+      top_module,
+      torder,
+      hierarchy_separator,
+      cell_mapping,
+    )?;
+
+    Ok(Self { module })
+  }
+
+  pub fn get_port_shape(&self, name: &str) -> anyhow::Result<[usize; 2]> {
+    Ok(self.module.get_port_shape(name)?)
+  }
+
+  pub fn get_port_numpy(&self, name: &str, numpy_array: &Bound<'_, PyAny>) -> PyResult<()> {
+    let item_type = numpy_array.getattr("dtype")?.getattr("str")?.to_string();
+    let elem_size = self.get_port_shape(name)?[1];
+
+    let bits = self
+      .module
+      .get_port(name)
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
+
+    match item_type.as_str() {
+      "|b1" => bits_to_bool_numpy(&bits, numpy_array),
+      "|u1" | "<V1" => bits_to_int_numpy::<u8>(&bits, elem_size, numpy_array),
+      "<u2" => bits_to_int_numpy::<u16>(&bits, elem_size, numpy_array),
+      "<u4" => bits_to_int_numpy::<u32>(&bits, elem_size, numpy_array),
+      "<u8" => bits_to_int_numpy::<u64>(&bits, elem_size, numpy_array),
+      "|i1" => bits_to_int_numpy::<i8>(&bits, elem_size, numpy_array),
+      "<i2" => bits_to_int_numpy::<i16>(&bits, elem_size, numpy_array),
+      "<i4" => bits_to_int_numpy::<i32>(&bits, elem_size, numpy_array),
+      "<i8" => bits_to_int_numpy::<i64>(&bits, elem_size, numpy_array),
+      // Cast f16 to u16
+      "<f2" => bits_to_int_numpy::<u16>(
+        &bits,
+        elem_size,
+        &numpy_array.call_method1("view", ("uint16",))?,
+      ),
+      // Cast f32 to u32
+      "<f4" => bits_to_int_numpy::<u32>(
+        &bits,
+        elem_size,
+        &numpy_array.call_method1("view", ("uint32",))?,
+      ),
+      _ => Err(PyValueError::new_err(format!(
+        "Unsupported item type: {item_type}"
+      ))),
+    }
+  }
+
+  pub fn set_port_numpy(&mut self, name: &str, numpy_array: &Bound<'_, PyAny>) -> PyResult<()> {
+    let item_type: String = numpy_array.getattr("dtype")?.getattr("str")?.to_string();
+    let shape = self.get_port_shape(name)?;
+    let elem_size = shape[1];
+
+    let bits = match item_type.as_str() {
+      "|b1" => bool_numpy_to_bits(numpy_array)?,
+      "|u1" => int_numpy_to_bits::<u8>(numpy_array, elem_size)?,
+      "<u2" => int_numpy_to_bits::<u16>(numpy_array, elem_size)?,
+      "<u4" => int_numpy_to_bits::<u32>(numpy_array, elem_size)?,
+      "<u8" => int_numpy_to_bits::<u64>(numpy_array, elem_size)?,
+      "|i1" => int_numpy_to_bits::<i8>(numpy_array, elem_size)?,
+      "<i2" => int_numpy_to_bits::<i16>(numpy_array, elem_size)?,
+      "<i4" => int_numpy_to_bits::<i32>(numpy_array, elem_size)?,
+      "<i8" => int_numpy_to_bits::<i64>(numpy_array, elem_size)?,
+      // Cast to raw uint8
+      "<V1" => int_numpy_to_bits::<u8>(&numpy_array.call_method1("view", ("uint8",))?, elem_size)?,
+      // Cast f16 to u16
+      "<f2" => {
+        int_numpy_to_bits::<u16>(&numpy_array.call_method1("view", ("uint16",))?, elem_size)?
+      }
+      // Cast f32 to u32
+      "<f4" => {
+        int_numpy_to_bits::<u32>(&numpy_array.call_method1("view", ("uint32",))?, elem_size)?
+      }
+      _ => {
+        return Err(PyValueError::new_err(format!(
+          "Unsupported item type: {item_type}"
+        )));
+      }
+    };
+
+    self
+      .module
+      .set_port(name, bits)
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))
+  }
+}
+
+#[pymethods]
+impl HardwareDesign {
+  #[new]
+  #[pyo3(signature = (netlist_path, torder_path, config, hierarchy_separator=None, top_module=None, cell_mapping=None))]
+  pub fn new(
+    py: Python<'_>,
+    netlist_path: PathBuf,
+    torder_path: PathBuf,
+    config: HashMap<String, PyRef<PortConfig>>,
+    hierarchy_separator: Option<&str>,
+    top_module: Option<&str>,
+    cell_mapping: Option<CellMapping>,
+  ) -> anyhow::Result<Py<Self>> {
+    let new_module = Self::new_base(
+      netlist_path,
+      top_module,
+      torder_path,
+      hierarchy_separator,
+      cell_mapping.as_ref(),
+    )?;
+
+    // Get submodules before binding to Python
+    let submodules = new_module
+      .module
+      .netlist
+      .modules
+      .iter()
+      .map(|p| p.join("."))
+      .collect::<Vec<String>>();
+
+    let py_module = Py::new(py, new_module)?;
+
+    // Add custom members (can't make them static for serialization)
+    let temp_binding = py_module.getattr(py, "__dict__")?;
+    let temp_dict = temp_binding.cast_bound::<PyDict>(py).unwrap();
+
+    // Add ports field
+    let ports = Py::new(py, Ports::new(py, config, py_module.clone_ref(py))?)?;
+    temp_dict.set_item("ports", ports)?;
+
+    // Add modules/submodules field
+    temp_dict.set_item("modules", PyList::new(py, submodules)?)?;
+
+    Ok(py_module)
+  }
+
+  pub fn reset(&mut self) {
+    self.module.reset()
+  }
+
+  pub fn eval(&mut self) {
+    self.module.eval()
+  }
+
+  #[pyo3(signature = (cycles=None))]
+  pub fn eval_clocked(&mut self, cycles: Option<u32>) -> anyhow::Result<()> {
+    Ok(self.module.eval_clocked(cycles)?)
+  }
+
+  #[pyo3(signature = (cycles=None))]
+  pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> anyhow::Result<()> {
+    Ok(self.module.eval_reset_clocked(cycles)?)
+  }
+
+  pub fn stick_signal(&mut self, net: usize, val: u8) -> anyhow::Result<()> {
+    Ok(self.module.stick_signal(net, Bit::from_int(val)?)?)
+  }
+
+  pub fn unstick_signal(&mut self, net: usize) -> anyhow::Result<()> {
+    Ok(self.module.unstick_signal(net)?)
+  }
+
+  pub fn is_port_input(&self, name: &str) -> anyhow::Result<bool> {
+    let direction = self.module.get_port_direction(name)?;
+    Ok(direction == PortDirection::Input)
+  }
+
+  #[pyo3(signature = (category="total", by_net=true))]
+  pub fn toggle_count(&self, py: Python<'_>, category: &str, by_net: bool) -> PyResult<Py<PyDict>> {
+    let category = match category {
+      "falling" => ToggleCount::Falling,
+      "rising" => ToggleCount::Rising,
+      "total" => ToggleCount::Total,
+      _ => {
+        return Err(PyValueError::new_err(format!(
+          "Invalid toggle category `{category}`"
+        )));
+      }
+    };
+
+    let toggles = PyDict::new(py);
+    if by_net {
+      for (submodule_names, nets_ref) in self.module.get_submodule_toggles_by_net(category) {
+        let name = submodule_names.join(".");
+        let nets: HashMap<String, u64> = nets_ref
+          .into_iter()
+          .map(|(n, c)| (n.to_string(), c))
+          .collect();
+
+        toggles.set_item(name, nets)?;
+      }
+    } else {
+      for (submodule_names, count) in self.module.get_submodule_toggles_total(category) {
+        let name = submodule_names.join(".");
+
+        toggles.set_item(name, count)?;
+      }
+    }
+
+    Ok(toggles.into())
+  }
+
+  pub fn netlist(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+    let json = py.import("json")?;
+    let netlist = self
+      .module
+      .netlist
+      .netlist
+      .to_string()
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
+
+    let netlist_dict: Bound<'_, PyDict> = json.getattr("loads")?.call1((netlist,))?.cast_into()?;
+    Ok(netlist_dict.unbind())
+  }
+
+  pub fn netlist_graph(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    let networkx = py.import("networkx")?;
+
+    let graph = self
+      .module
+      .netlist
+      .build_graph()
+      .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
+
+    let nx_graph = networkx.getattr("DiGraph")?.call0()?;
+
+    // Add nodes
+    let mut nodes: Vec<(usize, Py<PyDict>)> = vec![];
+    for i in graph.node_indices() {
+      let rtlid = graph.node_weight(i).unwrap();
+
+      let entry = PyDict::new(py);
+      entry.set_item("rtlid", rtlid.to_string())?;
+
+      // $input or $output cell, early continue
+      let Some(cell) = self.module.netlist.find_cell(rtlid) else {
+        nodes.push((i.index(), entry.unbind()));
+        continue;
+      };
+
+      // Extract other fields
+      entry.set_item("cell_type", cell.cell_type.clone())?;
+
+      if let Some(src_attr) = cell.attributes.get("src")
+        && let Some(src) = src_attr.to_string_if_string()
+      {
+        entry.set_item("src", src.to_string())?;
+      }
+
+      nodes.push((i.index(), entry.unbind()));
+    }
+    nx_graph.call_method1("add_nodes_from", (nodes,))?;
+
+    // Add edges
+    let mut edges: Vec<(usize, usize, Py<PyDict>)> = vec![];
+    for edge in graph.edge_references() {
+      let net_driver_node = edge.source();
+      let net_user_node = edge.target();
+
+      let net_driver = graph.node_weight(net_driver_node).unwrap();
+      let net_user = graph.node_weight(net_user_node).unwrap();
+      let net = *edge.weight();
+
+      let entry = PyDict::new(py);
+      entry.set_item("net", net)?;
+
+      if let Some(driver_cell) = self.module.netlist.find_cell(net_driver) {
+        for (port_name, bits) in &driver_cell.connections {
+          // TODO: pre-process this somehow
+          let nets = HashSet::<usize>::from_iter(
+            bits
+              .iter()
+              .map(parse_bit)
+              .collect::<Result<Vec<_>, _>>()
+              .map_err(|e| PyAttributeError::new_err(format!("{e}")))?,
+          );
+
+          if nets.contains(&net) {
+            entry.set_item("driver", port_name.clone())?;
+          }
+        }
+      }
+
+      if let Some(user_cell) = self.module.netlist.find_cell(net_user) {
+        for (port_name, bits) in &user_cell.connections {
+          // TODO: pre-process this somehow
+          let nets = HashSet::<usize>::from_iter(
+            bits
+              .iter()
+              .map(parse_bit)
+              .collect::<Result<Vec<_>, _>>()
+              .map_err(|e| PyAttributeError::new_err(format!("{e}")))?,
+          );
+
+          if nets.contains(&net) {
+            entry.set_item("user", port_name.clone())?;
+          }
+        }
+      }
+
+      edges.push((
+        net_driver_node.index(),
+        net_user_node.index(),
+        entry.unbind(),
+      ));
+    }
+    nx_graph.call_method1("add_edges_from", (edges,))?;
+
+    Ok(nx_graph.into())
+  }
+}

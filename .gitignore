@@ -158,4 +158,4 @@ Cargo.lock
 
 ### Generated ###
 examples/notebooks/*/output
-synth_output
+*.ruff_cache

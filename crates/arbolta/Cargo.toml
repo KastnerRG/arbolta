@@ -16,6 +16,7 @@ anyhow = { workspace = true }
 derive-new = "0.7"
 derive_more = { workspace = true }
 enum_dispatch = { workspace = true }
+flexbuffers = { workspace = true }
 indexmap = { workspace = true }
 inventory = "0.3.21"
 ndarray = { workspace = true }
@@ -23,9 +24,10 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 paste = "1.0.15"
 petgraph = { workspace = true }
-postcard = { workspace = true }
 rstest = { workspace = true }
 serde = { workspace = true }
 serde_json = "1.0.145"
+serde_with = "3.18.0"
+tempfile = "3.27.0"
 thiserror = { workspace = true }
 yosys-netlist-json = { workspace = true }

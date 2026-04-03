@@ -8,7 +8,6 @@ use crate::{
   netlist_wrapper::NetlistWrapper,
   port::{Port, PortDirection, PortError},
   signal::Signals,
-  yosys::{Netlist, TopoOrder},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Debug};
@@ -64,14 +63,9 @@ pub enum ToggleCount {
 
 impl HardwareModule {
   pub fn new(
-    netlist: Netlist,
-    top_module: Option<&str>,
-    torder: TopoOrder,
-    hierarchy_separator: Option<&str>,
+    netlist: NetlistWrapper,
     cell_mapping: Option<&CellMapping>,
   ) -> Result<HardwareModule, ModuleError> {
-    let netlist = NetlistWrapper::new(netlist, top_module, torder, hierarchy_separator)?;
-
     let cells = netlist.build_cells(cell_mapping)?;
 
     let global_net_max: usize = netlist

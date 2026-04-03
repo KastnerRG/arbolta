@@ -3,7 +3,12 @@
 
 // Re-export
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use std::{
+  fs::File,
+  io::BufWriter,
+  process::Command,
+  {collections::HashMap, fmt, str},
+};
 
 fn remove_whitespace<S: AsRef<str>>(s: &S) -> String {
   s.as_ref().chars().filter(|c| !c.is_whitespace()).collect()
@@ -50,7 +55,11 @@ impl fmt::Display for RTLID {
 
 pub type TopoOrder<'a> = HashMap<&'a str, Vec<&'a str>>;
 
-pub fn parse_torder<'a>(raw: &'a str) -> TopoOrder<'a> {
+pub fn parse_torder<'a, T>(raw: &'a T) -> Result<TopoOrder<'a>, str::Utf8Error>
+where
+  T: AsRef<[u8]> + ?Sized,
+{
+  let raw = str::from_utf8(raw.as_ref())?;
   let mut torder = TopoOrder::new();
   let mut current_module: Option<&'a str> = None;
 
@@ -74,12 +83,42 @@ pub fn parse_torder<'a>(raw: &'a str) -> TopoOrder<'a> {
     }
   }
 
-  torder
+  Ok(torder)
+}
+
+pub fn run_torder(netlist: &Netlist) -> anyhow::Result<String> {
+  // Create temporary directory
+  let temp_dir = tempfile::tempdir()?;
+
+  // Write netlist to file in temp dir
+  let netlist_path = temp_dir.path().join("netlist.json");
+  let netlist_file = File::create(&netlist_path)?;
+  netlist.to_writer(BufWriter::new(netlist_file))?;
+
+  let torder_path = temp_dir.path().join("torder.txt");
+
+  let passes = [
+    format!("read_json {}", netlist_path.display()),
+    format!("tee -o {} torder", torder_path.display()),
+  ]
+  .join("; ");
+
+  // Run Yosys
+  let command = Command::new("yosys").arg("-p").arg(passes).output()?;
+
+  // Check if Yosys failed
+  if !command.stderr.is_empty() {
+    let error_log = String::from_utf8(command.stderr)?;
+    anyhow::bail!(error_log)
+  }
+
+  // Load raw topological cell order
+  let torder = std::fs::read_to_string(torder_path)?;
+
+  Ok(torder)
 }
 
 // Re-export
 pub use yosys_netlist_json::{
   AttributeVal, BitVal, Cell, Module, Netlist, Netname, Port, PortDirection, SpecialBit,
 };
-
-// TODO: Maybe re-add Yosys bindings...

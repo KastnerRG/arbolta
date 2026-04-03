@@ -10,22 +10,26 @@ use crate::{
 use indexmap::{IndexSet, indexmap};
 use petgraph::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct NetlistWrapper {
   pub top_module: String,
   pub netlist: Netlist,
   pub cells: Vec<RTLID>, // Should be in topological order
   pub modules: HashSet<Vec<String>>,
+  // #[serde_as(as = "Vec<(RTLID, Box<[usize]>)>")]
+  #[serde_as(as = "Vec<(_, _)>")]
   pub nets: HashMap<RTLID, Box<[usize]>>,
   pub names_to_nets: HashMap<String, Box<[usize]>>,
 }
 
 impl NetlistWrapper {
   pub fn new(
-    netlist: Netlist,
     top_module: Option<&str>,
+    netlist: Netlist,
     torder: TopoOrder,
     hierarchy_separator: Option<&str>,
   ) -> Result<Self, ModuleError> {

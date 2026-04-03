@@ -1,37 +1,14 @@
 # Copyright (c) 2026 Alexander Redding
 # SPDX-License-Identifier: MIT
 
-from dataclasses import dataclass
 from os import PathLike
-from pathlib import Path
 from typing import Literal, Optional
 
 import numpy as np
 from networkx import DiGraph
-from numpy.typing import ArrayLike, DTypeLike
+from numpy.typing import ArrayLike
 
-@dataclass
-class PortConfig:
-    """
-    Configuration for a HardwareDesign port.
-
-    :var shape: Interpret port bits with shape, defaults to (1, 1)
-    :vartype shape: tuple[int, int]
-    :var dtype: Interpret port bits as `dtype`, defaults to `np.uint`
-    :vartype dtype: DTypeLike, optional
-    :var clock: Port is a clock signal, defaults to None
-    :vartype clock: bool, optional
-    :var reset: Port is a reset signal, defaults to None
-    :vartype reset: bool, optional
-    :var polarity: Clock polarity of port, defaults to None
-    :vartype polarity: 0 | 1, optional
-    """
-
-    shape: tuple[int, int] = (1, 1)
-    dtype: Optional[DTypeLike] = np.uint
-    clock: Optional[bool] = None
-    reset: Optional[bool] = None
-    polarity: Optional[Literal[0, 1]] = None
+from . import PortConfig
 
 # TODO: Add `raises` docs
 class Ports:
@@ -79,12 +56,13 @@ class HardwareDesign:
 
     ports: Ports
     modules: list[str]
+    config: dict[str, PortConfig]
 
     def __init__(
         self,
-        netlist_path: str | Path | PathLike,
-        torder_path: str | Path | PathLike,
+        netlist: str | PathLike[str] | bytes,
         config: dict[str, PortConfig],
+        torder: Optional[str | PathLike[str] | bytes] = None,
         hierarchy_separator: Optional[str] = None,
         top_module: Optional[str] = None,
         cell_mapping: Optional[dict[str, tuple[str, Optional[dict[str, str]]]]] = None,

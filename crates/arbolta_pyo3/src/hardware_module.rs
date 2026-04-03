@@ -2,64 +2,36 @@
 // Copyright (c) 2026 Alexander Redding
 // SPDX-License-Identifier: MIT
 
-use crate::conversion::{
-  bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits,
+use crate::{
+  conversion::{bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits},
+  ports::{PortConfig, Ports},
 };
-use crate::ports::{PortConfig, Ports};
 use arbolta::{
   bit::Bit,
   cell::CellMapping,
   hardware_module::{HardwareModule, ToggleCount},
+  netlist_wrapper::NetlistWrapper,
   port::{PortDirection, parse_bit},
-  yosys::{Netlist, parse_torder},
+  yosys::{self, Netlist},
 };
 use petgraph::visit::EdgeRef;
 use pyo3::{
-  exceptions::{PyAttributeError, PyValueError},
+  exceptions::{PyAttributeError, PyTypeError, PyValueError},
   prelude::*,
-  types::{PyDict, PyList},
+  types::{PyBytes, PyDict, PyList, PyString, PyTuple},
 };
 use serde::{Deserialize, Serialize};
-use std::{
-  collections::{HashMap, HashSet},
-  path::PathBuf,
-};
+use std::collections::{HashMap, HashSet};
 
-#[pyclass(weakref, dict)]
+#[pyclass(weakref, dict, module = "arbolta")]
 #[derive(Deserialize, Serialize)]
 pub struct HardwareDesign {
-  pub module: HardwareModule,
+  pub inner: HardwareModule,
 }
 
 impl HardwareDesign {
-  fn new_base(
-    netlist_path: PathBuf,
-    top_module: Option<&str>,
-    torder_path: PathBuf,
-    hierarchy_separator: Option<&str>,
-    cell_mapping: Option<&CellMapping>,
-  ) -> anyhow::Result<Self> {
-    // Read raw JSON netlist
-    let raw_netlist = std::fs::read(netlist_path)?;
-    let netlist = Netlist::from_slice(&raw_netlist)?;
-
-    // Read raw torder
-    let raw_torder = std::fs::read_to_string(torder_path)?;
-    let torder = parse_torder(&raw_torder);
-
-    let module = HardwareModule::new(
-      netlist,
-      top_module,
-      torder,
-      hierarchy_separator,
-      cell_mapping,
-    )?;
-
-    Ok(Self { module })
-  }
-
   pub fn get_port_shape(&self, name: &str) -> anyhow::Result<[usize; 2]> {
-    Ok(self.module.get_port_shape(name)?)
+    Ok(self.inner.get_port_shape(name)?)
   }
 
   pub fn get_port_numpy(&self, name: &str, numpy_array: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -67,7 +39,7 @@ impl HardwareDesign {
     let elem_size = self.get_port_shape(name)?[1];
 
     let bits = self
-      .module
+      .inner
       .get_port(name)
       .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
 
@@ -132,86 +104,149 @@ impl HardwareDesign {
     };
 
     self
-      .module
+      .inner
       .set_port(name, bits)
       .map_err(|e| PyAttributeError::new_err(format!("{e}")))
   }
 }
 
+fn parse_bytes_or_read_path(py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
+  // Check bytes
+  if let Ok(bytes) = data.cast::<PyBytes>() {
+    return Ok(bytes.as_bytes().to_vec());
+  }
+
+  // Check pathlike
+  let os = PyModule::import(py, "os")?;
+
+  if data.cast::<PyString>().is_ok() || data.is_instance(&os.getattr("PathLike")?)? {
+    // Read
+    let path: String = os.getattr("fspath")?.call1((data,))?.extract()?;
+    let bytes = std::fs::read(path)?;
+    return Ok(bytes);
+  }
+
+  Err(PyTypeError::new_err("expected bytes or str/os.PathLike"))
+}
+
 #[pymethods]
 impl HardwareDesign {
   #[new]
-  #[pyo3(signature = (netlist_path, torder_path, config, hierarchy_separator=None, top_module=None, cell_mapping=None))]
+  #[pyo3(signature = (netlist, config, torder=None, hierarchy_separator=None, top_module=None, cell_mapping=None))]
   pub fn new(
     py: Python<'_>,
-    netlist_path: PathBuf,
-    torder_path: PathBuf,
-    config: HashMap<String, PyRef<PortConfig>>,
+    netlist: &Bound<'_, PyAny>,
+    config: Py<PyAny>,
+    torder: Option<&Bound<'_, PyAny>>,
     hierarchy_separator: Option<&str>,
     top_module: Option<&str>,
     cell_mapping: Option<CellMapping>,
   ) -> anyhow::Result<Py<Self>> {
-    let new_module = Self::new_base(
-      netlist_path,
-      top_module,
-      torder_path,
-      hierarchy_separator,
-      cell_mapping.as_ref(),
-    )?;
+    let raw_netlist = parse_bytes_or_read_path(py, netlist)?;
+    let netlist = Netlist::from_slice(&raw_netlist)?;
+
+    let raw_torder = match torder {
+      Some(torder) => parse_bytes_or_read_path(py, torder)?,
+      None => yosys::run_torder(&netlist)?.into_bytes(),
+    };
+    let torder = yosys::parse_torder(&raw_torder)?;
+
+    let netlist_wrapper = NetlistWrapper::new(top_module, netlist, torder, hierarchy_separator)?;
+
+    let module = Self {
+      inner: HardwareModule::new(netlist_wrapper, cell_mapping.as_ref())?,
+    };
 
     // Get submodules before binding to Python
-    let submodules = new_module
-      .module
+    let submodules = module
+      .inner
       .netlist
       .modules
       .iter()
       .map(|p| p.join("."))
       .collect::<Vec<String>>();
 
-    let py_module = Py::new(py, new_module)?;
+    let py_module = Py::new(py, module)?;
 
     // Add custom members (can't make them static for serialization)
-    let temp_binding = py_module.getattr(py, "__dict__")?;
-    let temp_dict = temp_binding.cast_bound::<PyDict>(py).unwrap();
+    let dict_binding = py_module.getattr(py, "__dict__")?;
+    let self_dict = dict_binding.cast_bound::<PyDict>(py).unwrap();
 
     // Add ports field
-    let ports = Py::new(py, Ports::new(py, config, py_module.clone_ref(py))?)?;
-    temp_dict.set_item("ports", ports)?;
+    let temp_config: HashMap<String, PortConfig> = config.extract(py)?;
+    let ports = Py::new(py, Ports::new(py, &temp_config, py_module.clone_ref(py))?)?;
+    self_dict.set_item("ports", ports)?;
 
     // Add modules/submodules field
-    temp_dict.set_item("modules", PyList::new(py, submodules)?)?;
+    self_dict.set_item("modules", PyList::new(py, submodules)?)?;
+
+    // Add config
+    self_dict.set_item("config", config)?;
 
     Ok(py_module)
   }
 
+  pub fn __getnewargs__<'p>(
+    self_: Bound<'p, Self>,
+    py: Python<'p>,
+  ) -> anyhow::Result<Bound<'p, PyTuple>> {
+    let dict_binding = self_.getattr("__dict__")?.cast_into::<PyDict>().unwrap();
+    let config = dict_binding
+      .get_item("config")?
+      .ok_or_else(|| anyhow::anyhow!("Missing self.__dict__"))?;
+
+    let self_binding = &mut self_.borrow();
+    let netlist = self_binding.inner.netlist.netlist.to_string()?.into_bytes();
+
+    Ok((netlist, config).into_pyobject(py)?)
+  }
+
+  pub fn __getstate__(&self, py: Python) -> anyhow::Result<Py<PyAny>> {
+    let mut serializer = flexbuffers::FlexbufferSerializer::new();
+    self.inner.serialize(&mut serializer)?;
+
+    let data = serializer.view();
+    Ok(PyBytes::new(py, data).into())
+  }
+
+  pub fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> anyhow::Result<()> {
+    let data = state
+      .extract::<&[u8]>(py)
+      .map_err(|e| anyhow::anyhow!(format!("{e}")))?;
+    let reader = flexbuffers::Reader::get_root(data)?;
+    self.inner = HardwareModule::deserialize(reader)?;
+
+    Ok(())
+  }
+
   pub fn reset(&mut self) {
-    self.module.reset()
+    self.inner.reset()
   }
 
   pub fn eval(&mut self) {
-    self.module.eval()
+    self.inner.eval()
   }
 
   #[pyo3(signature = (cycles=None))]
   pub fn eval_clocked(&mut self, cycles: Option<u32>) -> anyhow::Result<()> {
-    Ok(self.module.eval_clocked(cycles)?)
+    Ok(self.inner.eval_clocked(cycles)?)
   }
 
   #[pyo3(signature = (cycles=None))]
   pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> anyhow::Result<()> {
-    Ok(self.module.eval_reset_clocked(cycles)?)
+    Ok(self.inner.eval_reset_clocked(cycles)?)
   }
 
   pub fn stick_signal(&mut self, net: usize, val: u8) -> anyhow::Result<()> {
-    Ok(self.module.stick_signal(net, Bit::from_int(val)?)?)
+    Ok(self.inner.stick_signal(net, Bit::from_int(val)?)?)
   }
 
   pub fn unstick_signal(&mut self, net: usize) -> anyhow::Result<()> {
-    Ok(self.module.unstick_signal(net)?)
+    Ok(self.inner.unstick_signal(net)?)
   }
 
   pub fn is_port_input(&self, name: &str) -> anyhow::Result<bool> {
-    let direction = self.module.get_port_direction(name)?;
+    let direction = self.inner.get_port_direction(name)?;
     Ok(direction == PortDirection::Input)
   }
 
@@ -230,7 +265,7 @@ impl HardwareDesign {
 
     let toggles = PyDict::new(py);
     if by_net {
-      for (submodule_names, nets_ref) in self.module.get_submodule_toggles_by_net(category) {
+      for (submodule_names, nets_ref) in self.inner.get_submodule_toggles_by_net(category) {
         let name = submodule_names.join(".");
         let nets: HashMap<String, u64> = nets_ref
           .into_iter()
@@ -240,7 +275,7 @@ impl HardwareDesign {
         toggles.set_item(name, nets)?;
       }
     } else {
-      for (submodule_names, count) in self.module.get_submodule_toggles_total(category) {
+      for (submodule_names, count) in self.inner.get_submodule_toggles_total(category) {
         let name = submodule_names.join(".");
 
         toggles.set_item(name, count)?;
@@ -250,10 +285,22 @@ impl HardwareDesign {
     Ok(toggles.into())
   }
 
+  pub fn torder(&self) -> PyResult<Vec<String>> {
+    let cells: Vec<String> = self
+      .inner
+      .netlist
+      .cells
+      .iter()
+      .map(|c| c.to_string())
+      .collect();
+
+    Ok(cells)
+  }
+
   pub fn netlist(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
     let json = py.import("json")?;
     let netlist = self
-      .module
+      .inner
       .netlist
       .netlist
       .to_string()
@@ -267,7 +314,7 @@ impl HardwareDesign {
     let networkx = py.import("networkx")?;
 
     let graph = self
-      .module
+      .inner
       .netlist
       .build_graph()
       .map_err(|e| PyAttributeError::new_err(format!("{e}")))?;
@@ -283,7 +330,7 @@ impl HardwareDesign {
       entry.set_item("rtlid", rtlid.to_string())?;
 
       // $input or $output cell, early continue
-      let Some(cell) = self.module.netlist.find_cell(rtlid) else {
+      let Some(cell) = self.inner.netlist.find_cell(rtlid) else {
         nodes.push((i.index(), entry.unbind()));
         continue;
       };
@@ -314,7 +361,7 @@ impl HardwareDesign {
       let entry = PyDict::new(py);
       entry.set_item("net", net)?;
 
-      if let Some(driver_cell) = self.module.netlist.find_cell(net_driver) {
+      if let Some(driver_cell) = self.inner.netlist.find_cell(net_driver) {
         for (port_name, bits) in &driver_cell.connections {
           // TODO: pre-process this somehow
           let nets = HashSet::<usize>::from_iter(
@@ -331,7 +378,7 @@ impl HardwareDesign {
         }
       }
 
-      if let Some(user_cell) = self.module.netlist.find_cell(net_user) {
+      if let Some(user_cell) = self.inner.netlist.find_cell(net_user) {
         for (port_name, bits) in &user_cell.connections {
           // TODO: pre-process this somehow
           let nets = HashSet::<usize>::from_iter(

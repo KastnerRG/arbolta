@@ -260,6 +260,19 @@ impl HardwareModule {
     Ok(())
   }
 
+  pub fn toggle_port(&mut self, name: &str) -> Result<(), ModuleError> {
+    let (Some(_port), Some(nets)) = (self.ports.get(name), self.get_net(name)) else {
+      return Err(ModuleError::MissingPort(name.to_string()));
+    };
+
+    nets
+      .to_owned()
+      .iter()
+      .for_each(|&net| self.signals.set_net(net, !self.signals.get_net(net)));
+
+    Ok(())
+  }
+
   // Returns ALL nets in design
   pub fn get_submodule_nets(&self) -> HashMap<&Vec<String>, HashMap<&str, &[usize]>> {
     let mut global_module_nets = HashMap::new();

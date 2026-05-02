@@ -41,9 +41,9 @@ fn bits_from_nets_pad(
 
 #[inline(always)]
 fn copy_nets(signals: &mut Signals, src_nets: &[usize], dst_nets: &[usize]) {
-  src_nets.iter().zip(dst_nets.iter()).for_each(|(src, dst)| {
-    signals.set_net(*dst, signals.get_net(*src));
-  })
+  for (&src, &dst) in src_nets.iter().zip(dst_nets) {
+    signals.set_net(dst, signals.get_net(src));
+  }
 }
 
 #[inline(always)]

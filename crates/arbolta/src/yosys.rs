@@ -22,19 +22,18 @@ pub struct RTLID {
 
 impl RTLID {
   pub fn new<S: AsRef<str>>(parents: &[S], name: &S) -> Self {
-    let mut name_clean = remove_whitespace(name);
-    let parents_clean: Vec<String> = parents.iter().map(|p| remove_whitespace(p)).collect();
+    let name_clean = remove_whitespace(name);
 
-    if !parents_clean.is_empty() {
-      let name_stripped = name_clean.strip_prefix("$flatten\\").unwrap_or(&name_clean);
-      let parents_prefix = format!("{}.", parents_clean.join("."));
-
-      if let Some(actual_name) = name_stripped.strip_prefix(&parents_prefix) {
-        name_clean = actual_name.to_string();
-      } else {
-        name_clean = name_stripped.to_string();
-      }
-    }
+    let parents_clean: Vec<String> = parents
+      .iter()
+      .map(|p| {
+        let clean_p = remove_whitespace(p).replace("\\", "");
+        clean_p
+          .strip_prefix("$flatten")
+          .unwrap_or(&clean_p)
+          .to_string()
+      })
+      .collect();
 
     Self {
       parents: parents_clean,

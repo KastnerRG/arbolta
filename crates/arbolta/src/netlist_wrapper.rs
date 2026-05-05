@@ -20,7 +20,6 @@ pub struct NetlistWrapper {
   pub netlist: Netlist,
   pub cells: Vec<RTLID>, // Should be in topological order
   pub modules: HashSet<Vec<String>>,
-  // #[serde_as(as = "Vec<(RTLID, Box<[usize]>)>")]
   #[serde_as(as = "Vec<(_, _)>")]
   pub nets: HashMap<RTLID, Box<[usize]>>,
   pub names_to_nets: HashMap<String, Box<[usize]>>,
@@ -259,12 +258,7 @@ fn parse_cells(
   let mut cells = vec![];
   let mut new_cells = indexmap! {};
   for (cell_name, cell_info) in primitive_cells {
-    // TODO: Check if cell is primitive?
-    let id = if let Some(scopename) = cell_info.attributes.get("scopename")
-      && let Some(scopename) = scopename.to_string_if_string()
-    {
-      RTLID::new(&[scopename], &cell_name.as_str())
-    } else if let Some(split_name) =
+    let id = if let Some(split_name) =
       hierarchy_separator.map(|s| cell_name.split(s).collect::<Vec<&str>>())
       && let Some((name, parents)) = split_name.split_last()
     {
@@ -292,11 +286,7 @@ fn parse_nets(
 
   let mut new_nets = indexmap! {};
   for (net_name, net_info) in &module.netnames {
-    let id = if let Some(scopename) = net_info.attributes.get("scopename")
-      && let Some(scopename) = scopename.to_string_if_string()
-    {
-      RTLID::new(&[scopename], &net_name.as_str())
-    } else if let Some(hdlname) = net_info.attributes.get("hdlname")
+    let id = if let Some(hdlname) = net_info.attributes.get("hdlname")
       && let Some(hdlname) = hdlname.to_string_if_string()
     {
       let hdlname_split: Vec<&str> = hdlname.split(" ").collect();

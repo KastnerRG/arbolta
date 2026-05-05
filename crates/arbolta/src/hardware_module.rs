@@ -119,9 +119,9 @@ impl HardwareModule {
 
     for _ in 0..cycles {
       self.eval();
-      self.signals.set_net(clock_net, polarity);
-      self.eval();
       self.signals.set_net(clock_net, !polarity);
+      self.eval();
+      self.signals.set_net(clock_net, polarity);
       self.eval();
     }
 

@@ -24,6 +24,7 @@ fn test_bit_to_char(#[case] bit: Bit, #[case] expected: char) {
 #[case(true, Bit::ONE)]
 fn test_bit_from_bool(#[case] val: bool, #[case] expected: Bit) {
   assert_eq!(Bit(val), expected);
+  assert_eq!(Bit::from(val), expected);
 }
 
 #[rstest]
@@ -31,6 +32,7 @@ fn test_bit_from_bool(#[case] val: bool, #[case] expected: Bit) {
 #[case(Bit::ONE, true)]
 fn test_bit_to_bool(#[case] bit: Bit, #[case] expected: bool) {
   assert_eq!(bit.0, expected);
+  assert_eq!(bool::from(bit), expected);
 }
 
 #[test]

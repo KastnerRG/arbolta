@@ -4,6 +4,7 @@
 
 use crate::bit::Bit;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// Connection between cells/modules and related statistics.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
@@ -11,7 +12,7 @@ pub struct Signals {
   // Total number of nets
   pub size: usize,
   /// Value of nets
-  pub nets: Box<[Bit]>, // TODO: Make this private
+  nets: Box<[Bit]>,
   /// Signals have been modified
   dirty: bool,
   // Is net constant
@@ -22,15 +23,35 @@ pub struct Signals {
   toggles_falling: Box<[u64]>,
 }
 
+#[derive(Debug, Error)]
+pub enum SignalError {
+  #[error("Cannot set constant for net `{0}`")]
+  SetConstant(usize),
+  #[error("Cannot unset constant for net `{0}`")]
+  UnsetConstant(usize),
+}
+
+// pub type Net = usize;
 impl Signals {
+  pub const NET_CONST0: usize = 0;
+  pub const NET_CONST1: usize = 1;
+
   pub fn new(size: usize) -> Self {
+    let actual_size = size + 2; // +2 for constant 0 and 1
+    let mut nets = vec![Bit::ZERO; actual_size];
+    let mut constant = vec![false; actual_size];
+
+    // Add 0, 1 constants
+    (nets[Self::NET_CONST0], constant[Self::NET_CONST0]) = (Bit::ZERO, true);
+    (nets[Self::NET_CONST1], constant[Self::NET_CONST1]) = (Bit::ONE, true);
+
     Self {
-      size,
+      size: actual_size,
       dirty: false,
-      nets: vec![Bit::ZERO; size].into(),
-      constant: vec![false; size].into(),
-      toggles_rising: vec![0; size].into(),
-      toggles_falling: vec![0; size].into(),
+      nets: nets.into(),
+      constant: constant.into(),
+      toggles_rising: vec![0; actual_size].into(),
+      toggles_falling: vec![0; actual_size].into(),
     }
   }
 
@@ -69,9 +90,19 @@ impl Signals {
   /// * `net` - Selected signal net.
   /// * `val` - Constant `Bit` value.
   #[inline]
-  pub fn set_constant(&mut self, net: usize, val: Bit) {
-    self.constant[net] = true;
-    self.nets[net] = val;
+  pub fn set_constant(&mut self, net: usize, val: Bit) -> Result<(), SignalError> {
+    if net == Self::NET_CONST0 || net == Self::NET_CONST1 {
+      Err(SignalError::SetConstant(net))
+    } else {
+      self.constant[net] = true;
+      self.nets[net] = val;
+
+      Ok(())
+    }
+  }
+
+  pub fn is_constant(&self, net: usize) -> bool {
+    self.constant[net]
   }
 
   /// Make net modifiable.
@@ -79,8 +110,14 @@ impl Signals {
   /// # Arguments
   /// * `net` - Selected signal net.
   #[inline]
-  pub fn unset_constant(&mut self, net: usize) {
-    self.constant[net] = false;
+  pub fn unset_constant(&mut self, net: usize) -> Result<(), SignalError> {
+    if net == Self::NET_CONST0 || net == Self::NET_CONST1 {
+      Err(SignalError::UnsetConstant(net))
+    } else {
+      self.constant[net] = false;
+
+      Ok(())
+    }
   }
 
   #[inline]
@@ -100,6 +137,10 @@ impl Signals {
     self.constant.iter_mut().for_each(|c| *c = false);
     self.toggles_rising.iter_mut().for_each(|t| *t = 0);
     self.toggles_falling.iter_mut().for_each(|t| *t = 0);
+
+    // Add 0, 1 constants
+    (self.nets[Self::NET_CONST0], self.constant[Self::NET_CONST0]) = (Bit::ZERO, true);
+    (self.nets[Self::NET_CONST1], self.constant[Self::NET_CONST1]) = (Bit::ONE, true);
   }
 
   /// Total number times `net` has been toggled since last reset.

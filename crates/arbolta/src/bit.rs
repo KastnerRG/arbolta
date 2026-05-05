@@ -101,7 +101,7 @@ impl fmt::Display for Bit {
 }
 
 /// Structure for storing+manipulating a vector of `Bit`s
-#[derive(Debug, PartialEq, Eq, Default, IntoIterator)]
+#[derive(Debug, PartialEq, Eq, Default, IntoIterator, Clone, Serialize, Deserialize)]
 pub struct BitVec {
   #[into_iterator(owned, ref, ref_mut)]
   pub bits: Vec<Bit>,
@@ -175,13 +175,27 @@ impl FromIterator<bool> for BitVec {
   }
 }
 
+impl FromIterator<Bit> for BitVec {
+  fn from_iter<I: IntoIterator<Item = Bit>>(iter: I) -> Self {
+    iter.into_iter().collect::<Vec<Bit>>().into()
+  }
+}
+
 impl BitVec {
+  pub fn new(size: usize) -> Self {
+    Self::from(vec![Bit::ZERO; size])
+  }
+
   pub fn len(&self) -> usize {
     self.bits.len()
   }
 
   pub fn is_empty(&self) -> bool {
     self.bits.is_empty()
+  }
+
+  pub fn clear(&mut self) {
+    self.bits.iter_mut().for_each(|b| *b = Bit::ZERO);
   }
 
   /// Create from int.
@@ -230,6 +244,27 @@ impl BitVec {
       bits,
       shape: [size, elem_size],
     }
+  }
+
+  pub fn set_bits<I: IntoIterator<Item = Bit>>(&mut self, iter: I) {
+    self.bits.iter_mut().zip(iter).for_each(|(a, b)| *a = b);
+  }
+
+  pub fn set_int<T: PrimInt>(&mut self, val: T) {
+    let bit_width = std::mem::size_of::<T>() * 8;
+
+    // Maybe pad
+    let is_signed = T::min_value() != T::zero();
+    let msb = ((val >> (bit_width - 1)) & T::one()) == T::one();
+    let pad_bit = Bit(is_signed & msb);
+
+    let pad_size = self.bits.len().saturating_sub(bit_width);
+
+    let bits = (0..bit_width)
+      .map(|n| Bit::from((val >> n) & T::one() == T::one()))
+      .chain(std::iter::repeat_n(pad_bit, pad_size));
+
+    self.set_bits(bits);
   }
 
   /// Convert to int.

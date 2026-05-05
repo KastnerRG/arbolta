@@ -7,7 +7,7 @@ use crate::{
   signal::Signals,
 };
 use paste::paste;
-use std::{collections::BTreeMap, env};
+use std::{borrow::Borrow, collections::BTreeMap, env};
 mod arithmetic;
 mod bool_ops;
 mod logic_reduce_ops;
@@ -15,38 +15,20 @@ mod registers;
 mod shift_ops;
 mod various;
 
-#[inline(always)]
-fn bits_from_nets(signals: &mut Signals, nets: &[usize]) -> Vec<Bit> {
-  nets.iter().map(|&n| signals.get_net(n)).collect()
-}
-
-#[inline(always)]
-fn bits_from_nets_pad(
-  signed: bool,
-  signals: &mut Signals,
-  nets: &[usize],
-  out_size: usize,
-) -> Vec<Bit> {
-  let mut bits = bits_from_nets(signals, nets);
-  if bits.len() < out_size {
-    let sign_bit_set = bits.last().is_some_and(|&b| b.into());
-    let pad_bit: Bit = (signed && sign_bit_set).into();
-    let pad_size = out_size - bits.len();
-
-    bits.extend(std::iter::repeat_n(pad_bit, pad_size));
-  }
-
-  bits
-}
-
-#[inline(always)]
-fn copy_nets(signals: &mut Signals, src_nets: &[usize], dst_nets: &[usize]) {
-  for (&src, &dst) in src_nets.iter().zip(dst_nets) {
-    signals.set_net(dst, signals.get_net(src));
+#[inline]
+fn copy_nets<S, D, SI, DI>(signals: &mut Signals, src_nets: S, dst_nets: D)
+where
+  S: IntoIterator<Item = SI>,
+  D: IntoIterator<Item = DI>,
+  SI: Borrow<usize>,
+  DI: Borrow<usize>,
+{
+  for (src, dst) in src_nets.into_iter().zip(dst_nets) {
+    signals.set_net(*dst.borrow(), signals.get_net(*src.borrow()));
   }
 }
 
-#[inline(always)]
+#[inline]
 fn copy_bits<'a>(
   signals: &mut Signals,
   dst_nets: &[usize],
@@ -60,51 +42,81 @@ fn copy_bits<'a>(
 
 #[macro_export]
 macro_rules! define_arithmetic_cell {
-  ($rtl_names:expr, $cell_type:ident { $($in_netn:ident),* $(,)?}, $out_net:ident, $body:expr) => {
-    #[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
-    pub struct $cell_type {
-      pub signed: bool,
-
-      $(
-        $in_netn: Box<[usize]>,
-      )*
-
-      $out_net: Box<[usize]>
-    }
-
-    impl CellFn for $cell_type {
-      #[inline]
-      fn eval(&mut self, signals: &mut Signals) {
+  ($rtl_names:expr, $cell_type:ident { $($in_port:ident),* $(,)?}, $out_port:ident, $body:expr) => {
+    paste! {
+      #[derive(Debug, Clone, Serialize, Deserialize)]
+      pub struct $cell_type {
+        pub signed: bool,
+        // Nets
         $(
-          let $in_netn = BitVec::from(bits_from_nets(signals, &self.$in_netn));
+          [<$in_port _nets>]: Box<[usize]>,
         )*
 
-        let output_size = self.$out_net.len();
+        [<$out_port _nets>]: Box<[usize]>,
+        // Temp bits
+        $(
+          [<$in_port _bits>]: BitVec,
+        )*
 
-        let $out_net: BitVec = if self.signed {
-          if output_size <= 64 {
-            let ($($in_netn,)*) = ($($in_netn.to_int::<i64>(),)*);
-            BitVec::from_int( $body as i64, Some(output_size))
-          } else {
-            let ($($in_netn,)*) = ($($in_netn.to_int::<i128>(),)*);
-            BitVec::from_int( $body as i128, Some(output_size))
-          }
-        } else {
-          if output_size <= 64 {
-            let ($($in_netn,)*) = ($($in_netn.to_int::<u64>(),)*);
-            BitVec::from_int( $body as u64, Some(output_size))
-          } else {
-            let ($($in_netn,)*) = ($($in_netn.to_int::<u128>(),)*);
-            BitVec::from_int( $body as u128, Some(output_size))
-          }
-        };
-
-        copy_bits(signals, &self.$out_net, &$out_net);
+        [<$out_port _bits>]: BitVec
       }
-
-      fn reset(&mut self) {}
+    }
+    paste! {
+      impl $cell_type {
+        pub fn new(
+          signed: bool,
+          $(
+            [<$in_port _nets>]: Box<[usize]>,
+          )*
+          [<$out_port _nets>]: Box<[usize]>,
+        ) -> Self {
+          Self {
+            signed,
+            $(
+              [<$in_port _bits>]: BitVec::new([<$in_port _nets>].len()),
+              [<$in_port _nets>],
+            )*
+            [<$out_port _bits>]: BitVec::new([<$out_port _nets>].len()),
+            [<$out_port _nets>],
+          }
+        }
+      }
     }
 
+    paste! {
+      impl CellFn for $cell_type {
+        #[inline]
+        fn eval(&mut self, signals: &mut Signals) {
+          $(
+            self.[<$in_port _bits>].set_bits(self.[<$in_port _nets>].iter().map(|&n| signals.get_net(n)));
+          )*
+
+          let output_size = self.[<$out_port _nets>].len();
+
+          if self.signed {
+            if output_size <= 64 {
+              let ($($in_port,)*) = ($(self.[<$in_port _bits>].to_int::<i64>(),)*);
+              self.[<$out_port _bits>].set_int( $body as i64 );
+            } else {
+              let ($($in_port,)*) = ($(self.[<$in_port _bits>].to_int::<i128>(),)*);
+              self.[<$out_port _bits>].set_int( $body as i64 );
+            }
+          } else {
+            if output_size <= 64 {
+              let ($($in_port,)*) = ($(self.[<$in_port _bits>].to_int::<u64>(),)*);
+              self.[<$out_port _bits>].set_int( $body as i64 );
+            } else {
+              let ($($in_port,)*) = ($(self.[<$in_port _bits>].to_int::<u128>(),)*);
+              self.[<$out_port _bits>].set_int( $body as i64 );
+            }
+          };
+
+          copy_bits(signals, &self.[<$out_port _nets>], &self.[<$out_port _bits>]);
+        }
+
+        fn reset(&mut self) {}
+      }
+    }
     paste! {
       inventory::submit! {CellRegistration::new($rtl_names,
         |connections: &BTreeMap<&str, Box<[usize]>>, parameters: &BTreeMap<&str, usize>| {
@@ -114,7 +126,7 @@ macro_rules! define_arithmetic_cell {
 
           let mut signed = false;
           $(
-            if let Some(&net_signed) = parameters.get(stringify!([<$in_netn:upper _SIGNED>])) {
+            if let Some(&net_signed) = parameters.get(stringify!([<$in_port:upper _SIGNED>])) {
               signed |= (net_signed != 0);
             }
           )*
@@ -122,9 +134,9 @@ macro_rules! define_arithmetic_cell {
           $cell_type::new(
             signed,
             $(
-              connections[stringify!([<$in_netn:upper>])].clone(),
+              connections[stringify!([<$in_port:upper>])].clone(),
             )*
-            connections[stringify!([<$out_net:upper>])].clone()
+            connections[stringify!([<$out_port:upper>])].clone()
           ).into()
       })}
     }

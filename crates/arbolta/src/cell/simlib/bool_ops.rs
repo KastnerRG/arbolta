@@ -18,13 +18,20 @@ pub struct Not {
 impl CellFn for Not {
   #[inline]
   fn eval(&mut self, signals: &mut Signals) {
-    let a = bits_from_nets_pad(self.signed, signals, &self.a_nets, self.y_nets.len());
+    // Need to pad w/ possible sign extension
+    let pad_size = self.y_nets.len().saturating_sub(self.a_nets.len());
+    let pad_net = self.a_nets.last().copied().unwrap_or(0) * self.signed as usize;
 
-    self
-      .y_nets
+    let a_nets = self
+      .a_nets
       .iter()
-      .zip(a)
-      .for_each(|(&n, b)| signals.set_net(n, !b));
+      .copied()
+      .chain(std::iter::repeat_n(pad_net, pad_size));
+
+    for (a_net, &y_net) in a_nets.zip(self.y_nets.iter()) {
+      let a = signals.get_net(a_net);
+      signals.set_net(y_net, !a);
+    }
   }
 
   fn reset(&mut self) {}

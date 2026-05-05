@@ -3,7 +3,6 @@
 
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
-use derive_more::Constructor;
 use serde::{Deserialize, Serialize};
 use std::ops::Rem;
 

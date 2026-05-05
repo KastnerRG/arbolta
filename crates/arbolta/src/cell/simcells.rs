@@ -17,7 +17,7 @@ macro_rules! create_cell {
     }
 
     impl CellFn for $cell_type {
-      #[inline]
+       #[inline]
       fn eval(&mut self, signals: &mut Signals) {
         signals.set_net(self.$out_net, $body());
       }
@@ -52,7 +52,7 @@ macro_rules! create_cell {
     }
 
     impl CellFn for $cell_type {
-      #[inline]
+       #[inline]
       fn eval(&mut self, signals: &mut Signals) {
         $(
           let $in_netn: Bit = signals.get_net(self.$in_netn);
@@ -100,7 +100,7 @@ macro_rules! create_cell {
     }
 
     impl CellFn for $cell_type {
-      #[inline]
+       #[inline]
       fn eval(&mut self, signals: &mut Signals) {
         $(
           let $in_netn: Bit = signals.get_net(self.$in_netn);

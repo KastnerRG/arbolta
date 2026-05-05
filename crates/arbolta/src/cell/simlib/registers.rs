@@ -127,13 +127,13 @@ impl CellFn for DffAsyncResetEnable {
 mod tests {
   use std::str::FromStr;
 
-  use super::super::{bits_from_nets, copy_bits};
+  use super::super::copy_bits;
   use super::*;
   use crate::{bit::BitVec, cell::test_helpers::*};
   use rstest::rstest;
 
-  fn read_bits(signals: &mut Signals, nets: &[usize]) -> BitVec {
-    BitVec::from(bits_from_nets(signals, nets))
+  fn read_bits(signals: &Signals, nets: &[usize]) -> BitVec {
+    BitVec::from_iter(nets.iter().map(|&n| signals.get_net(n)))
   }
 
   fn write_bits(signals: &mut Signals, nets: &[usize], value: &BitVec) {
@@ -153,8 +153,9 @@ mod tests {
   #[case(Bit::ZERO, "1101111001101100")]
   fn reg_captures_only_on_active_edge(#[case] polarity: Bit, #[case] first_value: BitVec) {
     let width = first_value.len();
-    let nets = allocate_nets(Some(1), &[&first_value, &first_value]);
-    let clock_net = 0;
+    let nets = allocate_nets(Some(NET_OFFSET + 1), &[&first_value, &first_value]);
+    let clock_net = NET_OFFSET;
+
     let (data_in_nets, data_out_nets) = (&nets[0], &nets[1]);
 
     let mut signals = Signals::new(data_out_nets.last().unwrap() + 1);
@@ -168,43 +169,43 @@ mod tests {
     // Start on inactive clock level.
     signals.set_net(clock_net, !polarity);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), zeros(width));
+    assert_eq!(read_bits(&signals, data_out_nets), zeros(width));
     assert_eq!(cell.last_clock, !polarity);
 
     // Change D while clock is inactive: Q must not change.
     write_bits(&mut signals, data_in_nets, &first_value);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), zeros(width));
+    assert_eq!(read_bits(&signals, data_out_nets), zeros(width));
     assert_eq!(cell.last_clock, !polarity);
 
     // Active edge: Q captures D.
     signals.set_net(clock_net, polarity);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), first_value);
+    assert_eq!(read_bits(&signals, data_out_nets), first_value);
     assert_eq!(cell.last_clock, polarity);
 
     // Hold active level, change D: Q must not change without a new edge.
     let second_value = zeros(width);
     write_bits(&mut signals, data_in_nets, &second_value);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), first_value);
+    assert_eq!(read_bits(&signals, data_out_nets), first_value);
     assert_eq!(cell.last_clock, polarity);
 
     // Inactive edge: Q must still not change.
     signals.set_net(clock_net, !polarity);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), first_value);
+    assert_eq!(read_bits(&signals, data_out_nets), first_value);
     assert_eq!(cell.last_clock, !polarity);
 
     // Hold inactive level, still no change.
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), first_value);
+    assert_eq!(read_bits(&signals, data_out_nets), first_value);
     assert_eq!(cell.last_clock, !polarity);
 
     // Next active edge captures new D.
     signals.set_net(clock_net, polarity);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), second_value);
+    assert_eq!(read_bits(&signals, data_out_nets), second_value);
     assert_eq!(cell.last_clock, polarity);
   }
 
@@ -219,8 +220,8 @@ mod tests {
     #[case] v1: BitVec,
     #[case] v2: BitVec,
   ) {
-    let nets = allocate_nets(Some(1), &[&v0, &v0]);
-    let clock_net = 0;
+    let nets = allocate_nets(Some(NET_OFFSET + 1), &[&v0, &v0]);
+    let clock_net = NET_OFFSET;
     let (data_in_nets, data_out_nets) = (&nets[0], &nets[1]);
 
     let mut signals = Signals::new(data_out_nets.last().unwrap() + 1);
@@ -237,7 +238,7 @@ mod tests {
     write_bits(&mut signals, data_in_nets, &v0);
     signals.set_net(clock_net, polarity);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), v0);
+    assert_eq!(read_bits(&signals, data_out_nets), v0);
 
     signals.set_net(clock_net, !polarity);
     cell.eval(&mut signals);
@@ -245,7 +246,7 @@ mod tests {
     write_bits(&mut signals, data_in_nets, &v1);
     signals.set_net(clock_net, polarity);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), v1);
+    assert_eq!(read_bits(&signals, data_out_nets), v1);
 
     signals.set_net(clock_net, !polarity);
     cell.eval(&mut signals);
@@ -253,15 +254,15 @@ mod tests {
     write_bits(&mut signals, data_in_nets, &v2);
     signals.set_net(clock_net, polarity);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), v2);
+    assert_eq!(read_bits(&signals, data_out_nets), v2);
   }
 
   #[rstest]
   #[case(Bit::ONE, "10101100")]
   #[case(Bit::ZERO, "10101100")]
   fn reg_reset_restores_edge_detector_state(#[case] polarity: Bit, #[case] value: BitVec) {
-    let nets = allocate_nets(Some(1), &[&value, &value]);
-    let clock_net = 0;
+    let nets = allocate_nets(Some(NET_OFFSET + 1), &[&value, &value]);
+    let clock_net = NET_OFFSET;
     let (data_in_nets, data_out_nets) = (&nets[0], &nets[1]);
 
     let mut signals = Signals::new(data_out_nets.last().unwrap() + 1);
@@ -284,7 +285,7 @@ mod tests {
     // With clock still active, eval will look like an active edge and capture.
     write_bits(&mut signals, data_in_nets, &value);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), value);
+    assert_eq!(read_bits(&signals, data_out_nets), value);
     assert_eq!(cell.last_clock, polarity);
   }
 
@@ -294,8 +295,8 @@ mod tests {
   fn reg_does_not_recapture_without_transition(#[case] polarity: Bit) {
     let init = BitVec::from_str("0011").unwrap();
     let next = BitVec::from_str("1100").unwrap();
-    let nets = allocate_nets(Some(1), &[&init, &init]);
-    let clock_net = 0;
+    let nets = allocate_nets(Some(NET_OFFSET + 1), &[&init, &init]);
+    let clock_net = NET_OFFSET;
     let (data_in_nets, data_out_nets) = (&nets[0], &nets[1]);
 
     let mut signals = Signals::new(data_out_nets.last().unwrap() + 1);
@@ -312,15 +313,15 @@ mod tests {
     write_bits(&mut signals, data_in_nets, &init);
     signals.set_net(clock_net, polarity);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), init);
+    assert_eq!(read_bits(&signals, data_out_nets), init);
 
     // Change D while clock remains active; repeated evals must not change Q.
     write_bits(&mut signals, data_in_nets, &next);
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), init);
+    assert_eq!(read_bits(&signals, data_out_nets), init);
 
     cell.eval(&mut signals);
-    assert_eq!(read_bits(&mut signals, data_out_nets), init);
+    assert_eq!(read_bits(&signals, data_out_nets), init);
   }
   // #[rstest]
   // #[case::zero(Bit::ONE, "000000000000")] // 0
@@ -413,7 +414,7 @@ mod tests {
     );
 
     cell.eval(&mut signals);
-    let actual = BitVec::from(bits_from_nets(&mut signals, data_out_nets));
+    let actual = read_bits(&signals, data_out_nets);
     assert_eq!(actual.to_int::<i32>(), 0); // Should start w/ 0
     // TODO: Check other cases
   }

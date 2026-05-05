@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Alexander Redding
 // SPDX-License-Identifier: MIT
 
-use crate::yosys;
+use crate::{signal::Signals, yosys};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use thiserror::Error;
@@ -25,8 +25,8 @@ pub fn parse_bit(bit: &yosys::BitVal) -> Result<usize, PortError> {
   match bit {
     yosys::BitVal::N(net) => Ok(*net),
     yosys::BitVal::S(constant) => match constant {
-      yosys::SpecialBit::_0 => Ok(0), // Global 0
-      yosys::SpecialBit::_1 => Ok(1), // Global 1
+      yosys::SpecialBit::_0 => Ok(Signals::NET_CONST0), // Global 0
+      yosys::SpecialBit::_1 => Ok(Signals::NET_CONST1), // Global 1
       yosys::SpecialBit::X => Err(PortError::Direction("X".to_string())),
       yosys::SpecialBit::Z => Err(PortError::Direction("Z".to_string())),
     },
@@ -68,19 +68,6 @@ impl TryFrom<&yosys::Port> for Port {
 }
 
 impl Port {
-  // TODO: Remove and use try_from
-  // pub fn new(port: &yosys_json::Port) -> Result<Self, PortError> {
-  //   let direction = PortDirection::try_from(&port.direction)?;
-  //   let nets: Vec<usize> = port.bits.iter().map(parse_bit).collect::<Result<_, _>>()?;
-  //   let shape = [1, nets.len()];
-
-  //   Ok(Self {
-  //     direction,
-  //     nets: nets.into(),
-  //     shape,
-  //   })
-  // }
-
   pub fn set_shape(&mut self, shape: &[usize; 2]) -> Result<(), PortError> {
     if shape[0] * shape[1] != self.shape[0] * self.shape[1] {
       Err(PortError::Shape {

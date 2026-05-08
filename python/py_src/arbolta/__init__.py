@@ -6,9 +6,9 @@ from typing import Literal, Optional
 import numpy as np
 from numpy.typing import DTypeLike
 
-from .arbolta import HardwareDesign, Ports
+from .arbolta import Bit, CellMapping, HardwareDesign, Ports
 
-__all__ = ["HardwareDesign", "Ports", "PortConfig"]
+__all__ = ["HardwareDesign", "Ports", "PortConfig", "CellMapping", "Bit"]
 
 
 @dataclass

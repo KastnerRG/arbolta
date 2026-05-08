@@ -2,16 +2,13 @@
 # SPDX-License-Identifier: MIT
 
 from os import PathLike
-from typing import Literal, Optional
+from typing import Optional
 
 import numpy as np
 from networkx import DiGraph
 from numpy.typing import ArrayLike
 
-from . import PortConfig
-
-type CellMapping = dict[str, tuple[str, Optional[dict[str, str]]]]
-type Bit = Literal[0, 1]
+from . import Bit, CellMapping, PortConfig
 
 # TODO: Add `raises` docs
 class Ports:

@@ -1,14 +1,18 @@
 # Copyright (c) 2026 Alexander Redding
 # SPDX-License-Identifier: MIT
+
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 from numpy.typing import DTypeLike
 
-from .arbolta import Bit, CellMapping, HardwareDesign, Ports
+from .arbolta import HardwareDesign, Ports
 
 __all__ = ["HardwareDesign", "Ports", "PortConfig", "CellMapping", "Bit"]
+
+type CellMapping = dict[str, tuple[str, Optional[dict[str, str]]]]
+type Bit = Literal[0, 1]
 
 
 @dataclass

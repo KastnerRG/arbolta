@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Alexander Redding
 # SPDX-License-Identifier: MIT
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Optional
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -32,4 +32,4 @@ class PortConfig:
     dtype: DTypeLike = np.uint
     clock: bool = False
     reset: bool = False
-    polarity: Optional[Literal[0, 1]] = None
+    polarity: Optional[Bit] = None

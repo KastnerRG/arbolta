@@ -10,7 +10,7 @@ authors = [
     { name = "Alexander Redding", email = "alredding@ucsd.edu" },
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
@@ -34,6 +34,10 @@ dev = [
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
     "ruff>=0.14.10",
+]
+examples = [
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
 ]
 
 [project.urls]

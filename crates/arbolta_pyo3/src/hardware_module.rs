@@ -237,6 +237,19 @@ impl HardwareDesign {
     Ok(self.inner.eval_reset_clocked(cycles)?)
   }
 
+  pub fn set_signal(&mut self, net: usize, val: u8) -> anyhow::Result<()> {
+    Ok(self.inner.set_signal(net, Bit::from_int(val)?)?)
+  }
+
+  pub fn get_signal(&mut self, net: usize) -> anyhow::Result<u8> {
+    let val = self.inner.get_signal(net)?;
+    Ok(val.to_int())
+  }
+
+  pub fn toggle_signal(&mut self, net: usize) -> anyhow::Result<()> {
+    Ok(self.inner.toggle_signal(net)?)
+  }
+
   pub fn stick_signal(&mut self, net: usize, val: u8) -> anyhow::Result<()> {
     Ok(self.inner.stick_signal(net, Bit::from_int(val)?)?)
   }

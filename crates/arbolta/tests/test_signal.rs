@@ -236,3 +236,19 @@ fn test_signal_unset_constant_pass(#[case] net: usize, #[case] val: Bit) {
   x.set_net(net, !val);
   assert_eq!(x.get_net(net), !val);
 }
+
+#[rstest]
+#[case(NET_OFFSET, Bit::ZERO)]
+#[case(NET_OFFSET, Bit::ONE)]
+fn test_signal_toggle(#[case] net: usize, #[case] val: Bit) {
+  let mut x = Signals::new(1);
+
+  x.set_net(net, val);
+  x.clear_dirty();
+  assert!(!x.is_dirty());
+  assert_eq!(x.get_net(net), val);
+
+  x.toggle_net(net);
+  assert!(x.is_dirty());
+  assert_eq!(x.get_net(net), !val);
+}

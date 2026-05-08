@@ -10,6 +10,9 @@ from numpy.typing import ArrayLike
 
 from . import PortConfig
 
+type CellMapping = dict[str, tuple[str, Optional[dict[str, str]]]]
+type Bit = Literal[0, 1]
+
 # TODO: Add `raises` docs
 class Ports:
     """
@@ -65,7 +68,7 @@ class HardwareDesign:
         torder: Optional[str | PathLike[str] | bytes] = None,
         hierarchy_separator: Optional[str] = None,
         top_module: Optional[str] = None,
-        cell_mapping: Optional[dict[str, tuple[str, Optional[dict[str, str]]]]] = None,
+        cell_mapping: Optional[CellMapping] = None,
     ) -> None: ...
     def reset(self) -> None:
         """
@@ -99,7 +102,10 @@ class HardwareDesign:
         :raises AttributeError: No reset signal configured
         """
 
-    def stick_signal(self, net: int, val: Literal[0, 1]) -> None: ...
+    def set_signal(self, net: int, val: Bit) -> None: ...
+    def get_signal(self, net: int) -> Bit: ...
+    def toggle_signal(self, net: int) -> None: ...
+    def stick_signal(self, net: int, val: Bit) -> None: ...
     def unstick_signal(self, net: int) -> None: ...
     def toggle_count(
         self, category: str = "total", by_net: bool = True

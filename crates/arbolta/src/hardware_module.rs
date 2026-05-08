@@ -141,13 +141,39 @@ impl HardwareModule {
     Ok(())
   }
 
+  pub fn set_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
+    if net >= self.signals.size {
+      Err(ModuleError::MissingNet(net))
+    } else {
+      self.signals.set_net(net, value);
+
+      Ok(())
+    }
+  }
+
+  pub fn get_signal(&self, net: usize) -> Result<Bit, ModuleError> {
+    if net >= self.signals.size {
+      Err(ModuleError::MissingNet(net))
+    } else {
+      Ok(self.signals.get_net(net))
+    }
+  }
+
+  pub fn toggle_signal(&mut self, net: usize) -> Result<(), ModuleError> {
+    if net >= self.signals.size {
+      Err(ModuleError::MissingNet(net))
+    } else {
+      self.signals.toggle_net(net);
+
+      Ok(())
+    }
+  }
+
   pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
     if net >= self.signals.size {
       Err(ModuleError::MissingNet(net))
     } else {
-      self.signals.set_constant(net, value)?;
-
-      Ok(())
+      Ok(self.signals.set_constant(net, value)?)
     }
   }
 
@@ -155,9 +181,7 @@ impl HardwareModule {
     if net >= self.signals.size {
       Err(ModuleError::MissingNet(net))
     } else {
-      self.signals.unset_constant(net)?;
-
-      Ok(())
+      Ok(self.signals.unset_constant(net)?)
     }
   }
 

@@ -83,6 +83,12 @@ impl Signals {
     self.nets[net]
   }
 
+  #[inline]
+  pub fn toggle_net(&mut self, net: usize) {
+    let val = self.nets[net];
+    self.set_net(net, !val);
+  }
+
   /// Make net constant.
   /// Net cannot be updated until calling `unset_constant`.
   ///

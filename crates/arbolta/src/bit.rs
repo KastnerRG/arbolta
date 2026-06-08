@@ -31,6 +31,7 @@ use thiserror::Error;
   BitXor,
   Not,
 )]
+#[cfg_attr(feature = "pyo3", derive(pyo3::IntoPyObject))]
 pub struct Bit(#[debug("{}", if *_0 {"1"} else {"0"})] pub bool);
 
 #[derive(Debug, PartialEq, Eq, Error)]
@@ -102,6 +103,7 @@ impl fmt::Display for Bit {
 
 /// Structure for storing+manipulating a vector of `Bit`s
 #[derive(Debug, PartialEq, Eq, Default, IntoIterator, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "pyo3", derive(pyo3::IntoPyObject))]
 pub struct BitVec {
   #[into_iterator(owned, ref, ref_mut)]
   pub bits: Vec<Bit>,

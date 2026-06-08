@@ -7,7 +7,7 @@ use crate::{
   ports::{PortConfig, Ports},
 };
 use arbolta::{
-  bit::Bit,
+  bit::{Bit, BitVec},
   cell::CellMapping,
   hardware_module::{HardwareModule, ToggleCount},
   netlist_wrapper::NetlistWrapper,
@@ -152,6 +152,7 @@ impl HardwareDesign {
     let torder = yosys::parse_torder(&raw_torder)?;
 
     let netlist_wrapper = NetlistWrapper::new(top_module, netlist, torder, hierarchy_separator)?;
+    let found_top_module = netlist_wrapper.top_module.clone();
 
     let module = Self {
       inner: HardwareModule::new(netlist_wrapper, cell_mapping.as_ref())?,
@@ -178,6 +179,7 @@ impl HardwareDesign {
     self_dict.set_item("ports", ports)?;
 
     // Add modules/submodules field
+    self_dict.set_item("top_module", found_top_module)?;
     self_dict.set_item("modules", PyList::new(py, submodules)?)?;
 
     // Add config
@@ -417,5 +419,27 @@ impl HardwareDesign {
     nx_graph.call_method1("add_edges_from", (edges,))?;
 
     Ok(nx_graph.into())
+  }
+
+  pub fn submodule_nets(&self) -> HashMap<String, HashMap<&str, &[usize]>> {
+    let net_info = self.inner.get_submodule_nets();
+
+    net_info
+      .into_iter()
+      .map(|(k, v)| (k.join("."), v))
+      .collect()
+  }
+
+  pub fn submodule_net_values(&self) -> HashMap<String, HashMap<&str, Vec<Bit>>> {
+    let net_info = self.inner.get_submodule_net_values();
+    net_info
+      .into_iter()
+      .map(|(k, v)| {
+        (
+          k.join("."),
+          v.into_iter().map(|(k, v)| (k, v.bits)).collect(),
+        )
+      })
+      .collect()
   }
 }

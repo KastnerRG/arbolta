@@ -48,12 +48,15 @@ class HardwareDesign:
     :param cell_mapping: Define additional cell types
     :type cell_mapping: dict[str, tuple[str, Optional[dict[str, str]]]], optional
 
+    :var top_module: Top module of design
+    :vartype top_module: str
     :var ports: Access to simulated module ports
     :vartype ports: Ports
     :var modules: List of all submodules in design
     :vartype modules: list[str]
     """
 
+    top_module: str
     ports: Ports
     modules: list[str]
     config: dict[str, PortConfig]
@@ -109,3 +112,5 @@ class HardwareDesign:
     ) -> dict[str, dict[str, int]] | dict[str, int]: ...
     def netlist(self) -> dict: ...
     def netlist_graph(self) -> DiGraph: ...
+    def submodule_nets(self) -> dict[str, dict[str, list[int]]]: ...
+    def submodule_net_values(self) -> dict[str, dict[str, list[bool]]]: ...

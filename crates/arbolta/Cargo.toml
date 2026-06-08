@@ -13,8 +13,8 @@ exclude = [
 
 [dependencies]
 anyhow = { workspace = true }
-derive-new = "0.7"
 derive_more = { workspace = true }
+derive-new = "0.7"
 enum_dispatch = { workspace = true }
 flexbuffers = { workspace = true }
 indexmap = { workspace = true }
@@ -24,11 +24,14 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 paste = "1.0.15"
 petgraph = { workspace = true }
+pyo3 = { version = "0.27", optional = true }
 rstest = { workspace = true }
 serde = { workspace = true }
 serde_json = "1.0.145"
 serde_with = "3.18.0"
 tempfile = "3.27.0"
 thiserror = { workspace = true }
-vcd = "0.7.0"
 yosys-netlist-json = { workspace = true }
+
+[features]
+pyo3 = ["dep:pyo3"]

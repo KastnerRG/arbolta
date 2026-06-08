@@ -110,7 +110,15 @@ impl Ports {
 
     let binding = &mut new_self.bind(py).borrow_mut();
 
-    let port_names: Vec<String> = module_ref.ports.keys().cloned().collect();
+    let port_names: HashSet<String> = module_ref.ports.keys().cloned().collect();
+
+    // Check for invalid ports in config
+    for port_name in config.keys() {
+      if !port_names.contains(port_name) {
+        return Err(PyValueError::new_err(format!("Port `{port_name}` doesn't exist")).into());
+      }
+    }
+
     for port_name in port_names {
       let direction = module_ref.get_port_direction(&port_name)?;
       let kwargs = PyDict::new(py);

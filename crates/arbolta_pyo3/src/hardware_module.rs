@@ -7,7 +7,7 @@ use crate::{
   ports::{PortConfig, Ports},
 };
 use arbolta::{
-  bit::{Bit, BitVec},
+  bit::Bit,
   cell::CellMapping,
   hardware_module::{HardwareModule, ToggleCount},
   netlist_wrapper::NetlistWrapper,
@@ -18,7 +18,7 @@ use petgraph::visit::EdgeRef;
 use pyo3::{
   exceptions::{PyAttributeError, PyTypeError, PyValueError},
   prelude::*,
-  types::{PyBytes, PyDict, PyList, PyString, PyTuple},
+  types::{PyBytes, PyDict, PyString, PyTuple},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -26,6 +26,10 @@ use std::collections::{HashMap, HashSet};
 #[pyclass(weakref, dict, module = "arbolta")]
 #[derive(Deserialize, Serialize)]
 pub struct HardwareDesign {
+  #[pyo3(get)]
+  pub top_module: String,
+  #[pyo3(get)]
+  pub modules: Vec<String>,
   pub inner: HardwareModule,
 }
 
@@ -131,41 +135,59 @@ fn parse_bytes_or_read_path(py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult
 
 #[pymethods]
 impl HardwareDesign {
+  #[allow(clippy::too_many_arguments)]
   #[new]
-  #[pyo3(signature = (netlist, config, torder=None, hierarchy_separator=None, top_module=None, cell_mapping=None))]
+  #[pyo3(signature = (config, netlist=None, torder=None, hierarchy_separator=None, top_module=None, cell_mapping=None, design=None))]
   pub fn new(
     py: Python<'_>,
-    netlist: &Bound<'_, PyAny>,
     config: Py<PyAny>,
+    netlist: Option<&Bound<'_, PyAny>>,
     torder: Option<&Bound<'_, PyAny>>,
     hierarchy_separator: Option<&str>,
     top_module: Option<&str>,
     cell_mapping: Option<CellMapping>,
+    design: Option<Py<PyAny>>,
   ) -> anyhow::Result<Py<Self>> {
-    let raw_netlist = parse_bytes_or_read_path(py, netlist)?;
-    let netlist = Netlist::from_slice(&raw_netlist)?;
+    // Deserialize
+    let hardware_module: HardwareModule = if let Some(design) = design {
+      let data = design
+        .extract::<&[u8]>(py)
+        .map_err(|e| anyhow::anyhow!(format!("{e}")))?;
+      let reader = flexbuffers::Reader::get_root(data)?;
 
-    let raw_torder = match torder {
-      Some(torder) => parse_bytes_or_read_path(py, torder)?,
-      None => yosys::run_torder(&netlist)?.into_bytes(),
+      HardwareModule::deserialize(reader)?
+
+    // Actually parse
+    } else if let Some(netlist) = netlist {
+      let raw_netlist = parse_bytes_or_read_path(py, netlist)?;
+      let netlist = Netlist::from_slice(&raw_netlist)?;
+
+      let raw_torder = match torder {
+        Some(torder) => parse_bytes_or_read_path(py, torder)?,
+        None => yosys::run_torder(&netlist)?.into_bytes(),
+      };
+      let torder = yosys::parse_torder(&raw_torder)?;
+
+      let netlist_wrapper = NetlistWrapper::new(top_module, netlist, torder, hierarchy_separator)?;
+
+      HardwareModule::new(netlist_wrapper, cell_mapping.as_ref())?
+    } else {
+      return Err(PyValueError::new_err("Invalid arguments".to_string()).into());
     };
-    let torder = yosys::parse_torder(&raw_torder)?;
 
-    let netlist_wrapper = NetlistWrapper::new(top_module, netlist, torder, hierarchy_separator)?;
-    let found_top_module = netlist_wrapper.top_module.clone();
-
-    let module = Self {
-      inner: HardwareModule::new(netlist_wrapper, cell_mapping.as_ref())?,
-    };
-
-    // Get submodules before binding to Python
-    let submodules = module
-      .inner
+    let top_module = hardware_module.netlist.top_module.clone();
+    let submodules = hardware_module
       .netlist
       .modules
       .iter()
       .map(|p| p.join("."))
       .collect::<Vec<String>>();
+
+    let module = Self {
+      top_module,
+      modules: submodules,
+      inner: hardware_module,
+    };
 
     let py_module = Py::new(py, module)?;
 
@@ -178,47 +200,56 @@ impl HardwareDesign {
     let ports = Py::new(py, Ports::new(py, &temp_config, py_module.clone_ref(py))?)?;
     self_dict.set_item("ports", ports)?;
 
-    // Add modules/submodules field
-    self_dict.set_item("top_module", found_top_module)?;
-    self_dict.set_item("modules", PyList::new(py, submodules)?)?;
-
     // Add config
     self_dict.set_item("config", config)?;
 
     Ok(py_module)
   }
 
-  pub fn __getnewargs__<'p>(
-    self_: Bound<'p, Self>,
-    py: Python<'p>,
-  ) -> anyhow::Result<Bound<'p, PyTuple>> {
+  #[staticmethod]
+  fn _from_pickle(state: Bound<'_, PyBytes>) -> anyhow::Result<Self> {
+    Ok(flexbuffers::from_slice(state.as_bytes())?)
+  }
+
+  // pub fn __reduce_ex__<'py>(&self, py: Python<'py>, _protocol: i32) -> anyhow::Result<Py<PyAny>> {
+  //   let mut serializer = flexbuffers::FlexbufferSerializer::new();
+  //   self.serialize(&mut serializer)?;
+  //   let state = serializer.view();
+
+  //   let class = py.get_type::<Self>();
+  //   let callable = class.getattr("_from_pickle")?;
+
+  //   Ok(
+  //     (callable, (PyBytes::new(py, &state),))
+  //       .into_pyobject(py)?
+  //       .into(),
+  //   )
+  // }
+  fn __getstate__(&self) -> Option<()> {
+    None
+  }
+
+  pub fn __getnewargs_ex__<'py>(
+    self_: Bound<'py, Self>,
+    py: Python<'py>,
+  ) -> anyhow::Result<(Bound<'py, PyTuple>, Bound<'py, PyDict>)> {
     let dict_binding = self_.getattr("__dict__")?.cast_into::<PyDict>().unwrap();
     let config = dict_binding
       .get_item("config")?
       .ok_or_else(|| anyhow::anyhow!("Missing self.__dict__"))?;
 
     let self_binding = &mut self_.borrow();
-    let netlist = self_binding.inner.netlist.netlist.to_string()?.into_bytes();
-
-    Ok((netlist, config).into_pyobject(py)?)
-  }
-
-  pub fn __getstate__(&self, py: Python) -> anyhow::Result<Py<PyAny>> {
     let mut serializer = flexbuffers::FlexbufferSerializer::new();
-    self.inner.serialize(&mut serializer)?;
+    self_binding.inner.serialize(&mut serializer)?;
+    let design = serializer.view();
 
-    let data = serializer.view();
-    Ok(PyBytes::new(py, data).into())
-  }
+    let args = PyTuple::empty(py);
+    let kwargs = PyDict::new(py);
 
-  pub fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> anyhow::Result<()> {
-    let data = state
-      .extract::<&[u8]>(py)
-      .map_err(|e| anyhow::anyhow!(format!("{e}")))?;
-    let reader = flexbuffers::Reader::get_root(data)?;
-    self.inner = HardwareModule::deserialize(reader)?;
+    kwargs.set_item("config", &config)?;
+    kwargs.set_item("design", design)?;
 
-    Ok(())
+    Ok((args, kwargs))
   }
 
   pub fn reset(&mut self) {

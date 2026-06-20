@@ -156,8 +156,10 @@ impl Ports {
         }
 
         let internal_shape = module_ref.get_port_shape(&port_name)?;
-        let (num_elems, elem_size) = (shape[1], internal_shape[1] / shape[1]);
+        let num_bits = internal_shape[0] * internal_shape[1];
+        let (num_elems, elem_size) = (shape[1], num_bits / shape[1]);
         module_ref.set_port_shape(&port_name, &[num_elems, elem_size])?;
+
         kwargs.set_item("dtype", port_config.dtype.bind(py))?;
         buffer_len = num_elems;
       // No config given

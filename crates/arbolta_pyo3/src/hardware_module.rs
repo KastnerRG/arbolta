@@ -18,7 +18,7 @@ use petgraph::visit::EdgeRef;
 use pyo3::{
   exceptions::{PyAttributeError, PyTypeError, PyValueError},
   prelude::*,
-  types::{PyBytes, PyDict, PyList, PyString, PyTuple},
+  types::{PyBytes, PyDict, PyString, PyTuple},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -26,6 +26,10 @@ use std::collections::{HashMap, HashSet};
 #[pyclass(weakref, dict, module = "arbolta")]
 #[derive(Deserialize, Serialize)]
 pub struct HardwareDesign {
+  #[pyo3(get)]
+  pub top_module: String,
+  #[pyo3(get)]
+  pub modules: Vec<String>,
   pub inner: HardwareModule,
 }
 
@@ -131,40 +135,59 @@ fn parse_bytes_or_read_path(py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult
 
 #[pymethods]
 impl HardwareDesign {
+  #[allow(clippy::too_many_arguments)]
   #[new]
-  #[pyo3(signature = (netlist, config, torder=None, hierarchy_separator=None, top_module=None, cell_mapping=None))]
+  #[pyo3(signature = (config, netlist=None, torder=None, hierarchy_separator=None, top_module=None, cell_mapping=None, design=None))]
   pub fn new(
     py: Python<'_>,
-    netlist: &Bound<'_, PyAny>,
     config: Py<PyAny>,
+    netlist: Option<&Bound<'_, PyAny>>,
     torder: Option<&Bound<'_, PyAny>>,
     hierarchy_separator: Option<&str>,
     top_module: Option<&str>,
     cell_mapping: Option<CellMapping>,
+    design: Option<Py<PyAny>>,
   ) -> anyhow::Result<Py<Self>> {
-    let raw_netlist = parse_bytes_or_read_path(py, netlist)?;
-    let netlist = Netlist::from_slice(&raw_netlist)?;
+    // Deserialize
+    let hardware_module: HardwareModule = if let Some(design) = design {
+      let data = design
+        .extract::<&[u8]>(py)
+        .map_err(|e| anyhow::anyhow!(format!("{e}")))?;
+      let reader = flexbuffers::Reader::get_root(data)?;
 
-    let raw_torder = match torder {
-      Some(torder) => parse_bytes_or_read_path(py, torder)?,
-      None => yosys::run_torder(&netlist)?.into_bytes(),
+      HardwareModule::deserialize(reader)?
+
+    // Actually parse
+    } else if let Some(netlist) = netlist {
+      let raw_netlist = parse_bytes_or_read_path(py, netlist)?;
+      let netlist = Netlist::from_slice(&raw_netlist)?;
+
+      let raw_torder = match torder {
+        Some(torder) => parse_bytes_or_read_path(py, torder)?,
+        None => yosys::run_torder(&netlist)?.into_bytes(),
+      };
+      let torder = yosys::parse_torder(&raw_torder)?;
+
+      let netlist_wrapper = NetlistWrapper::new(top_module, netlist, torder, hierarchy_separator)?;
+
+      HardwareModule::new(netlist_wrapper, cell_mapping.as_ref())?
+    } else {
+      return Err(PyValueError::new_err("Invalid arguments".to_string()).into());
     };
-    let torder = yosys::parse_torder(&raw_torder)?;
 
-    let netlist_wrapper = NetlistWrapper::new(top_module, netlist, torder, hierarchy_separator)?;
-
-    let module = Self {
-      inner: HardwareModule::new(netlist_wrapper, cell_mapping.as_ref())?,
-    };
-
-    // Get submodules before binding to Python
-    let submodules = module
-      .inner
+    let top_module = hardware_module.netlist.top_module.clone();
+    let submodules = hardware_module
       .netlist
       .modules
       .iter()
       .map(|p| p.join("."))
       .collect::<Vec<String>>();
+
+    let module = Self {
+      top_module,
+      modules: submodules,
+      inner: hardware_module,
+    };
 
     let py_module = Py::new(py, module)?;
 
@@ -177,46 +200,56 @@ impl HardwareDesign {
     let ports = Py::new(py, Ports::new(py, &temp_config, py_module.clone_ref(py))?)?;
     self_dict.set_item("ports", ports)?;
 
-    // Add modules/submodules field
-    self_dict.set_item("modules", PyList::new(py, submodules)?)?;
-
     // Add config
     self_dict.set_item("config", config)?;
 
     Ok(py_module)
   }
 
-  pub fn __getnewargs__<'p>(
-    self_: Bound<'p, Self>,
-    py: Python<'p>,
-  ) -> anyhow::Result<Bound<'p, PyTuple>> {
+  #[staticmethod]
+  fn _from_pickle(state: Bound<'_, PyBytes>) -> anyhow::Result<Self> {
+    Ok(flexbuffers::from_slice(state.as_bytes())?)
+  }
+
+  // pub fn __reduce_ex__<'py>(&self, py: Python<'py>, _protocol: i32) -> anyhow::Result<Py<PyAny>> {
+  //   let mut serializer = flexbuffers::FlexbufferSerializer::new();
+  //   self.serialize(&mut serializer)?;
+  //   let state = serializer.view();
+
+  //   let class = py.get_type::<Self>();
+  //   let callable = class.getattr("_from_pickle")?;
+
+  //   Ok(
+  //     (callable, (PyBytes::new(py, &state),))
+  //       .into_pyobject(py)?
+  //       .into(),
+  //   )
+  // }
+  fn __getstate__(&self) -> Option<()> {
+    None
+  }
+
+  pub fn __getnewargs_ex__<'py>(
+    self_: Bound<'py, Self>,
+    py: Python<'py>,
+  ) -> anyhow::Result<(Bound<'py, PyTuple>, Bound<'py, PyDict>)> {
     let dict_binding = self_.getattr("__dict__")?.cast_into::<PyDict>().unwrap();
     let config = dict_binding
       .get_item("config")?
       .ok_or_else(|| anyhow::anyhow!("Missing self.__dict__"))?;
 
     let self_binding = &mut self_.borrow();
-    let netlist = self_binding.inner.netlist.netlist.to_string()?.into_bytes();
-
-    Ok((netlist, config).into_pyobject(py)?)
-  }
-
-  pub fn __getstate__(&self, py: Python) -> anyhow::Result<Py<PyAny>> {
     let mut serializer = flexbuffers::FlexbufferSerializer::new();
-    self.inner.serialize(&mut serializer)?;
+    self_binding.inner.serialize(&mut serializer)?;
+    let design = serializer.view();
 
-    let data = serializer.view();
-    Ok(PyBytes::new(py, data).into())
-  }
+    let args = PyTuple::empty(py);
+    let kwargs = PyDict::new(py);
 
-  pub fn __setstate__(&mut self, py: Python, state: Py<PyAny>) -> anyhow::Result<()> {
-    let data = state
-      .extract::<&[u8]>(py)
-      .map_err(|e| anyhow::anyhow!(format!("{e}")))?;
-    let reader = flexbuffers::Reader::get_root(data)?;
-    self.inner = HardwareModule::deserialize(reader)?;
+    kwargs.set_item("config", &config)?;
+    kwargs.set_item("design", design)?;
 
-    Ok(())
+    Ok((args, kwargs))
   }
 
   pub fn reset(&mut self) {
@@ -235,6 +268,19 @@ impl HardwareDesign {
   #[pyo3(signature = (cycles=None))]
   pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> anyhow::Result<()> {
     Ok(self.inner.eval_reset_clocked(cycles)?)
+  }
+
+  pub fn set_signal(&mut self, net: usize, val: u8) -> anyhow::Result<()> {
+    Ok(self.inner.set_signal(net, Bit::from_int(val)?)?)
+  }
+
+  pub fn get_signal(&mut self, net: usize) -> anyhow::Result<u8> {
+    let val = self.inner.get_signal(net)?;
+    Ok(val.to_int())
+  }
+
+  pub fn toggle_signal(&mut self, net: usize) -> anyhow::Result<()> {
+    Ok(self.inner.toggle_signal(net)?)
   }
 
   pub fn stick_signal(&mut self, net: usize, val: u8) -> anyhow::Result<()> {
@@ -404,5 +450,27 @@ impl HardwareDesign {
     nx_graph.call_method1("add_edges_from", (edges,))?;
 
     Ok(nx_graph.into())
+  }
+
+  pub fn submodule_nets(&self) -> HashMap<String, HashMap<&str, &[usize]>> {
+    let net_info = self.inner.get_submodule_nets();
+
+    net_info
+      .into_iter()
+      .map(|(k, v)| (k.join("."), v))
+      .collect()
+  }
+
+  pub fn submodule_net_values(&self) -> HashMap<String, HashMap<&str, Vec<Bit>>> {
+    let net_info = self.inner.get_submodule_net_values();
+    net_info
+      .into_iter()
+      .map(|(k, v)| {
+        (
+          k.join("."),
+          v.into_iter().map(|(k, v)| (k, v.bits)).collect(),
+        )
+      })
+      .collect()
   }
 }

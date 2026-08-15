@@ -68,8 +68,18 @@ fn test_bools_to_bits(#[case] vals: Vec<bool>, #[case] expected: BitVec) {
 #[case("100", 4)]
 #[case("1010010", 82)]
 fn test_bits_to_u8(#[case] bits: BitVec, #[case] expected: u8) {
-  let actual: u8 = bits.to_int();
-  assert_eq!(actual, expected);
+  assert_eq!(bits.to_int::<u8>(), expected);
+
+  let mut temp_bits = BitVec::new(bits.len());
+
+  // Set bits
+  temp_bits.set_bits(bits.bits.into_iter());
+  assert_eq!(temp_bits.to_int::<u8>(), expected);
+
+  // Set int
+  temp_bits.clear();
+  temp_bits.set_int(expected);
+  assert_eq!(temp_bits.to_int::<u8>(), expected);
 }
 
 #[rstest]
@@ -86,8 +96,18 @@ fn test_bits_to_u8(#[case] bits: BitVec, #[case] expected: u8) {
 #[case("1001011010100", 4820)]
 #[case("1001011000111111", 38463)]
 fn test_bits_to_u16(#[case] bits: BitVec, #[case] expected: u16) {
-  let actual: u16 = bits.to_int();
-  assert_eq!(actual, expected);
+  assert_eq!(bits.to_int::<u16>(), expected);
+
+  let mut temp_bits = BitVec::new(bits.len());
+
+  // Set bits
+  temp_bits.set_bits(bits.bits.into_iter());
+  assert_eq!(temp_bits.to_int::<u16>(), expected);
+
+  // Set int
+  temp_bits.clear();
+  temp_bits.set_int(expected);
+  assert_eq!(temp_bits.to_int::<u16>(), expected);
 }
 
 #[rstest]
@@ -104,8 +124,18 @@ fn test_bits_to_u16(#[case] bits: BitVec, #[case] expected: u16) {
 #[case("11101000100100101100100000111000", 3901933624)]
 #[case("101101101110010001010000100101", 767104037)]
 fn test_bits_to_u32(#[case] bits: BitVec, #[case] expected: u32) {
-  let actual: u32 = bits.to_int();
-  assert_eq!(actual, expected);
+  assert_eq!(bits.to_int::<u32>(), expected);
+
+  let mut temp_bits = BitVec::new(bits.len());
+
+  // Set bits
+  temp_bits.set_bits(bits.bits.into_iter());
+  assert_eq!(temp_bits.to_int::<u32>(), expected);
+
+  // Set int
+  temp_bits.clear();
+  temp_bits.set_int(expected);
+  assert_eq!(temp_bits.to_int::<u32>(), expected);
 }
 
 #[rstest]
@@ -155,8 +185,18 @@ fn test_bits_to_u32(#[case] bits: BitVec, #[case] expected: u32) {
   12853083890790391361
 )]
 fn test_bits_to_u64(#[case] bits: BitVec, #[case] expected: u64) {
-  let actual: u64 = bits.to_int();
-  assert_eq!(actual, expected);
+  assert_eq!(bits.to_int::<u64>(), expected);
+
+  let mut temp_bits = BitVec::new(bits.len());
+
+  // Set bits
+  temp_bits.set_bits(bits.bits.into_iter());
+  assert_eq!(temp_bits.to_int::<u64>(), expected);
+
+  // Set int
+  temp_bits.clear();
+  temp_bits.set_int(expected);
+  assert_eq!(temp_bits.to_int::<u64>(), expected);
 }
 
 #[rstest]
@@ -173,8 +213,18 @@ fn test_bits_to_u64(#[case] bits: BitVec, #[case] expected: u64) {
 #[case("10011011",-101)]
 #[case("01101010", 106)]
 fn test_bits_to_i8(#[case] bits: BitVec, #[case] expected: i8) {
-  let actual: i8 = bits.to_int();
-  assert_eq!(actual, expected);
+  assert_eq!(bits.to_int::<i8>(), expected);
+
+  let mut temp_bits = BitVec::new(bits.len());
+
+  // Set bits
+  temp_bits.set_bits(bits.bits.into_iter());
+  assert_eq!(temp_bits.to_int::<i8>(), expected);
+
+  // Set int
+  temp_bits.clear();
+  temp_bits.set_int(expected);
+  assert_eq!(temp_bits.to_int::<i8>(), expected);
 }
 
 #[rstest]
@@ -191,8 +241,18 @@ fn test_bits_to_i8(#[case] bits: BitVec, #[case] expected: i8) {
 #[case("011011011011111", 14047)]
 #[case("011110000001011", 15371)]
 fn test_bits_to_i16(#[case] bits: BitVec, #[case] expected: i16) {
-  let actual: i16 = bits.to_int();
-  assert_eq!(actual, expected);
+  assert_eq!(bits.to_int::<i16>(), expected);
+
+  let mut temp_bits = BitVec::new(bits.len());
+
+  // Set bits
+  temp_bits.set_bits(bits.bits.into_iter());
+  assert_eq!(temp_bits.to_int::<i16>(), expected);
+
+  // Set int
+  temp_bits.clear();
+  temp_bits.set_int(expected);
+  assert_eq!(temp_bits.to_int::<i16>(), expected);
 }
 
 #[rstest]
@@ -209,8 +269,18 @@ fn test_bits_to_i16(#[case] bits: BitVec, #[case] expected: i16) {
 #[case("00110111011101100001010011000001", 930485441)]
 #[case("11001111010111010001111101110010", -815980686)]
 fn test_bits_to_i32(#[case] bits: BitVec, #[case] expected: i32) {
-  let actual: i32 = bits.to_int();
-  assert_eq!(actual, expected);
+  assert_eq!(bits.to_int::<i32>(), expected);
+
+  let mut temp_bits = BitVec::new(bits.len());
+
+  // Set bits
+  temp_bits.set_bits(bits.bits.into_iter());
+  assert_eq!(temp_bits.to_int::<i32>(), expected);
+
+  // Set int
+  temp_bits.clear();
+  temp_bits.set_int(expected);
+  assert_eq!(temp_bits.to_int::<i32>(), expected);
 }
 
 #[rstest]

@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: MIT
 
 from os import PathLike
-from typing import Literal, Optional
+from typing import Any, Optional
 
 import numpy as np
 from networkx import DiGraph
 from numpy.typing import ArrayLike
 
-from . import PortConfig
+from . import Bit, CellMapping, PortConfig
 
 # TODO: Add `raises` docs
 class Ports:
@@ -35,38 +35,46 @@ class HardwareDesign:
     """
     Simulated hardware design
 
-    :param netlist_path: Path to Yosys netlist JSON
-    :type netlist_path: str | Path | PathLike
-    :param torder_path: Path to Yosys topological order
-    :type torder_path: str | Path | PathLike
     :param config: Configuration for design ports
     :type config: dict[str, PortConfig]
+    :param netlist_path: Path to Yosys netlist JSON
+    :type netlist_path: str | Path | PathLike, optional
+    :param torder_path: Path to Yosys topological order
+    :type torder_path: str | Path | PathLike, optional
     :param hierarchy_separator: Additional hierarchy separator for submodules
     :type hierarchy_separator: str, optional
     :param top_module: Name of top module, defaults to None (find automatically)
     :type top_module: str, optional
     :param cell_mapping: Define additional cell types
     :type cell_mapping: dict[str, tuple[str, Optional[dict[str, str]]]], optional
+    :param design: Serialized design
+    :type design: bytes, optional
 
+    :var top_module: Top module of design
+    :vartype top_module: str
     :var ports: Access to simulated module ports
     :vartype ports: Ports
     :var modules: List of all submodules in design
     :vartype modules: list[str]
     """
 
+    top_module: str
     ports: Ports
     modules: list[str]
     config: dict[str, PortConfig]
 
     def __init__(
         self,
-        netlist: str | PathLike[str] | bytes,
         config: dict[str, PortConfig],
+        netlist: Optional[str | PathLike[str] | bytes] = None,
         torder: Optional[str | PathLike[str] | bytes] = None,
         hierarchy_separator: Optional[str] = None,
         top_module: Optional[str] = None,
-        cell_mapping: Optional[dict[str, tuple[str, Optional[dict[str, str]]]]] = None,
-    ) -> None: ...
+        cell_mapping: Optional[CellMapping] = None,
+        design: Optional[bytes] = None,
+    ): ...
+    def __getnewargs_ex__(self) -> tuple[tuple, dict]: ...
+    def __getstate__(self) -> Any: ...
     def reset(self) -> None:
         """
         Reset all design signals and registers to zero.
@@ -99,10 +107,15 @@ class HardwareDesign:
         :raises AttributeError: No reset signal configured
         """
 
-    def stick_signal(self, net: int, val: Literal[0, 1]) -> None: ...
+    def set_signal(self, net: int, val: Bit) -> None: ...
+    def get_signal(self, net: int) -> Bit: ...
+    def toggle_signal(self, net: int) -> None: ...
+    def stick_signal(self, net: int, val: Bit) -> None: ...
     def unstick_signal(self, net: int) -> None: ...
     def toggle_count(
         self, category: str = "total", by_net: bool = True
     ) -> dict[str, dict[str, int]] | dict[str, int]: ...
     def netlist(self) -> dict: ...
     def netlist_graph(self) -> DiGraph: ...
+    def submodule_nets(self) -> dict[str, dict[str, list[int]]]: ...
+    def submodule_net_values(self) -> dict[str, dict[str, list[bool]]]: ...

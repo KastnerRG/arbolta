@@ -7,13 +7,13 @@ use crate::{
   cell::{Cell, CellError, CellFn, CellMapping},
   netlist_wrapper::NetlistWrapper,
   port::{Port, PortDirection, PortError},
-  signal::Signals,
+  signal::{SignalError, Signals},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Debug};
 use thiserror::Error;
 
-#[derive(Default, Clone, Debug, Deserialize, Serialize)] //Decode, Encode
+#[derive(Default, Clone, Debug, Deserialize, Serialize)]
 pub struct HardwareModule {
   pub netlist: NetlistWrapper,
   pub signals: Signals,
@@ -34,6 +34,8 @@ pub enum ModuleError {
   MissingModule,
   #[error("Module `{0}` missing from topological order")]
   TopoOrder(String),
+  #[error(transparent)]
+  Signal(#[from] SignalError),
   #[error(transparent)]
   Cell(#[from] CellError),
   #[error(transparent)]
@@ -74,9 +76,7 @@ impl HardwareModule {
       .flatten()
       .fold(0, |max, &x| std::cmp::max(max, x));
 
-    let mut signals = Signals::new(global_net_max + 1);
-    signals.set_constant(0, Bit::ZERO);
-    signals.set_constant(1, Bit::ONE);
+    let signals = Signals::new(global_net_max + 1);
 
     // type doesn't matter here...
     let ports = netlist.find_module_ports::<&str>(None)?;
@@ -93,8 +93,6 @@ impl HardwareModule {
   pub fn reset(&mut self) {
     self.cells.iter_mut().for_each(|c| c.reset());
     self.signals.reset();
-    self.signals.set_constant(0, Bit::ZERO);
-    self.signals.set_constant(1, Bit::ONE);
   }
 
   // Eval until all signals have settled
@@ -121,9 +119,9 @@ impl HardwareModule {
 
     for _ in 0..cycles {
       self.eval();
-      self.signals.set_net(clock_net, polarity);
-      self.eval();
       self.signals.set_net(clock_net, !polarity);
+      self.eval();
+      self.signals.set_net(clock_net, polarity);
       self.eval();
     }
 
@@ -143,12 +141,39 @@ impl HardwareModule {
     Ok(())
   }
 
+  pub fn set_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
+    if net >= self.signals.size {
+      Err(ModuleError::MissingNet(net))
+    } else {
+      self.signals.set_net(net, value);
+
+      Ok(())
+    }
+  }
+
+  pub fn get_signal(&self, net: usize) -> Result<Bit, ModuleError> {
+    if net >= self.signals.size {
+      Err(ModuleError::MissingNet(net))
+    } else {
+      Ok(self.signals.get_net(net))
+    }
+  }
+
+  pub fn toggle_signal(&mut self, net: usize) -> Result<(), ModuleError> {
+    if net >= self.signals.size {
+      Err(ModuleError::MissingNet(net))
+    } else {
+      self.signals.toggle_net(net);
+
+      Ok(())
+    }
+  }
+
   pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
     if net >= self.signals.size {
       Err(ModuleError::MissingNet(net))
     } else {
-      self.signals.set_constant(net, value);
-      Ok(())
+      Ok(self.signals.set_constant(net, value)?)
     }
   }
 
@@ -156,8 +181,7 @@ impl HardwareModule {
     if net >= self.signals.size {
       Err(ModuleError::MissingNet(net))
     } else {
-      self.signals.unset_constant(net);
-      Ok(())
+      Ok(self.signals.unset_constant(net)?)
     }
   }
 
@@ -167,12 +191,7 @@ impl HardwareModule {
       return Err(ModuleError::MissingPort(name.to_string()));
     };
 
-    let bits: BitVec = nets
-      .iter()
-      .map(|idx| self.signals.get_net(*idx))
-      .collect::<Vec<Bit>>()
-      .into();
-
+    let bits = BitVec::from_iter(nets.iter().map(|&n| self.signals.get_net(n)));
     Ok(bits)
   }
 
@@ -232,11 +251,7 @@ impl HardwareModule {
       return Err(ModuleError::MissingPort(name.to_string()));
     };
 
-    let mut bits: BitVec = nets
-      .iter()
-      .map(|idx| self.signals.get_net(*idx))
-      .collect::<Vec<Bit>>()
-      .into();
+    let mut bits = BitVec::from_iter(nets.iter().map(|&n| self.signals.get_net(n)));
     bits.shape = port.shape;
 
     Ok(bits)
@@ -247,17 +262,48 @@ impl HardwareModule {
     I: IntoIterator<Item = B>,
     B: Into<Bit>,
   {
-    let (Some(_port), Some(nets)) = (self.ports.get(name), self.get_net(name)) else {
-      return Err(ModuleError::MissingPort(name.to_string()));
-    };
+    let Self {
+      signals,
+      netlist,
+      ports,
+      ..
+    } = self;
 
-    nets
-      .to_owned()
-      .iter()
-      .zip(vals.into_iter().map(Into::into))
-      .for_each(|(net, b)| self.signals.set_net(*net, b));
+    // Essentially just get_net
+    if let Some(nets) = netlist.names_to_nets.get(name).map(|v| &**v)
+      && ports.contains_key(name)
+    {
+      nets
+        .iter()
+        .zip(vals.into_iter().map(Into::into))
+        .for_each(|(&net, b)| signals.set_net(net, b));
 
-    Ok(())
+      Ok(())
+    } else {
+      Err(ModuleError::MissingPort(name.to_string()))
+    }
+  }
+
+  pub fn toggle_port(&mut self, name: &str) -> Result<(), ModuleError> {
+    let Self {
+      signals,
+      netlist,
+      ports,
+      ..
+    } = self;
+
+    // Essentially just get_net
+    if let Some(nets) = netlist.names_to_nets.get(name).map(|v| &**v)
+      && ports.contains_key(name)
+    {
+      nets
+        .iter()
+        .for_each(|&net| signals.set_net(net, !signals.get_net(net)));
+
+      Ok(())
+    } else {
+      Err(ModuleError::MissingPort(name.to_string()))
+    }
   }
 
   // Returns ALL nets in design

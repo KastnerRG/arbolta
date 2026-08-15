@@ -110,7 +110,15 @@ impl Ports {
 
     let binding = &mut new_self.bind(py).borrow_mut();
 
-    let port_names: Vec<String> = module_ref.ports.keys().cloned().collect();
+    let port_names: HashSet<String> = module_ref.ports.keys().cloned().collect();
+
+    // Check for invalid ports in config
+    for port_name in config.keys() {
+      if !port_names.contains(port_name) {
+        return Err(PyValueError::new_err(format!("Port `{port_name}` doesn't exist")).into());
+      }
+    }
+
     for port_name in port_names {
       let direction = module_ref.get_port_direction(&port_name)?;
       let kwargs = PyDict::new(py);
@@ -148,8 +156,10 @@ impl Ports {
         }
 
         let internal_shape = module_ref.get_port_shape(&port_name)?;
-        let (num_elems, elem_size) = (shape[1], internal_shape[1] / shape[1]);
+        let num_bits = internal_shape[0] * internal_shape[1];
+        let (num_elems, elem_size) = (shape[1], num_bits / shape[1]);
         module_ref.set_port_shape(&port_name, &[num_elems, elem_size])?;
+
         kwargs.set_item("dtype", port_config.dtype.bind(py))?;
         buffer_len = num_elems;
       // No config given

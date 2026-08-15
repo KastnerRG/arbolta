@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Alexander Redding
 # SPDX-License-Identifier: MIT
+
 from dataclasses import dataclass
 from typing import Literal, Optional
 
@@ -8,7 +9,10 @@ from numpy.typing import DTypeLike
 
 from .arbolta import HardwareDesign, Ports
 
-__all__ = ["HardwareDesign", "Ports", "PortConfig"]
+__all__ = ["HardwareDesign", "Ports", "PortConfig", "CellMapping", "Bit"]
+
+type CellMapping = dict[str, tuple[str, Optional[dict[str, str]]]]
+type Bit = Literal[0, 1]
 
 
 @dataclass
@@ -32,4 +36,4 @@ class PortConfig:
     dtype: DTypeLike = np.uint
     clock: bool = False
     reset: bool = False
-    polarity: Optional[Literal[0, 1]] = None
+    polarity: Optional[Bit] = None

@@ -15,7 +15,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "*"
-arbolta = { workspace = true }
+arbolta = { workspace = true, features = ["pyo3"] }
 flexbuffers = { workspace = true }
 num-traits = { workspace = true }
 numpy = "0.27"

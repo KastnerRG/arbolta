@@ -3,48 +3,79 @@
 
 use super::*;
 use crate::{bit::BitVec, signal::Signals};
-use derive_more::Constructor;
+use paste::paste;
 use serde::{Deserialize, Serialize};
 
 macro_rules! define_shift_cell {
-  ($rtl_names:expr, $cell_type:ident { $op_net:ident, $shift_net:ident }, $out_net:ident, $body:expr) => {
-    #[derive(Debug, Clone, Constructor, Serialize, Deserialize)]
-    pub struct $cell_type {
-      pub signed: bool,
-      $op_net: Box<[usize]>,
-      $shift_net: Box<[usize]>,
-      $out_net: Box<[usize]>,
+  ($rtl_names:expr, $cell_type:ident { $op_port:ident, $shift_port:ident }, $out_port:ident, $body:expr) => {
+    paste! {
+      #[derive(Debug, Clone, Serialize, Deserialize)]
+      pub struct $cell_type {
+        pub signed: bool,
+        // Nets
+        [<$op_port _nets>]: Box<[usize]>,
+        [<$shift_port _nets>]: Box<[usize]>,
+        [<$out_port _nets>]: Box<[usize]>,
+        // Bits
+        [<$op_port _bits>]: BitVec,
+        [<$shift_port _bits>]: BitVec,
+        [<$out_port _bits>]: BitVec,
+      }
+    }
+    paste! {
+      impl $cell_type {
+        pub fn new(
+          signed: bool,
+          [<$op_port _nets>]: Box<[usize]>,
+          [<$shift_port _nets>]: Box<[usize]>,
+          [<$out_port _nets>]: Box<[usize]>,
+        ) -> Self {
+          Self {
+            signed,
+            [<$op_port _bits>]: BitVec::new([<$op_port _nets>].len()),
+            [<$op_port _nets>],
+            [<$shift_port _bits>]: BitVec::new([<$shift_port _nets>].len()),
+            [<$shift_port _nets>],
+            [<$out_port _bits>]: BitVec::new([<$out_port _nets>].len()),
+            [<$out_port _nets>]
+          }
+        }
+      }
     }
 
-    impl CellFn for $cell_type {
-      #[inline]
-      fn eval(&mut self, signals: &mut Signals) {
-        let $op_net = BitVec::from(bits_from_nets(signals, &self.$op_net));
-        let $shift_net = BitVec::from(bits_from_nets(signals, &self.$shift_net)).to_int::<u32>();
-        let output_size = self.$out_net.len();
+    paste! {
+      impl CellFn for $cell_type {
+        #[inline]
+        fn eval(&mut self, signals: &mut Signals) {
+          self.[<$op_port _bits>].set_bits(self.[<$op_port _nets>].iter().map(|&n| signals.get_net(n)));
+          self.[<$shift_port _bits>].set_bits(self.[<$shift_port _nets>].iter().map(|&n| signals.get_net(n)));
 
-        let $out_net: BitVec = if self.signed {
-          if output_size <= 64 {
-            let $op_net = $op_net.to_int::<i64>();
-            BitVec::from_int($body as i64, Some(output_size))
-          } else {
-            let $op_net = $op_net.to_int::<i128>();
-            BitVec::from_int($body as i128, Some(output_size))
-          }
-        } else {
-          if output_size <= 64 {
-            let $op_net = $op_net.to_int::<u64>();
-            BitVec::from_int($body as u64, Some(output_size))
-          } else {
-            let $op_net = $op_net.to_int::<u128>();
-            BitVec::from_int($body as u128, Some(output_size))
-          }
-        };
+          let $shift_port = self.[<$shift_port _bits>].to_int::<u32>();
+          let output_size = self.[<$out_port _nets>].len();
 
-        copy_bits(signals, &self.$out_net, &$out_net);
+          if self.signed {
+            if output_size <= 64 {
+              let $op_port = self.[<$op_port _bits>].to_int::<i64>();
+              self.[<$out_port _bits>].set_int( $body as i64 );
+            } else {
+              let $op_port = self.[<$op_port _bits>].to_int::<i128>();
+              self.[<$out_port _bits>].set_int( $body as i64 );
+            }
+          } else {
+            if output_size <= 64 {
+              let $op_port = self.[<$op_port _bits>].to_int::<u64>();
+              self.[<$out_port _bits>].set_int( $body as i64 );
+            } else {
+              let $op_port = self.[<$op_port _bits>].to_int::<u128>();
+              self.[<$out_port _bits>].set_int( $body as i64 );
+            }
+          };
+
+          copy_bits(signals, &self.[<$out_port _nets>], &self.[<$out_port _bits>]);
+        }
+
+        fn reset(&mut self) {}
       }
-
-      fn reset(&mut self) {}
     }
 
     paste! {
@@ -54,16 +85,16 @@ macro_rules! define_shift_cell {
             println!("Parsing connections: {:#?}", connections);
           }
 
-          let signed = match parameters.get(stringify!([<$op_net:upper _SIGNED>])) {
+          let signed = match parameters.get(stringify!([<$op_port:upper _SIGNED>])) {
             Some(&net_signed) => net_signed != 0,
             None => false
           };
 
           $cell_type::new(
             signed,
-            connections[stringify!([<$op_net:upper>])].clone(),
-            connections[stringify!([<$shift_net:upper>])].clone(),
-            connections[stringify!([<$out_net:upper>])].clone()
+            connections[stringify!([<$op_port:upper>])].clone(),
+            connections[stringify!([<$shift_port:upper>])].clone(),
+            connections[stringify!([<$out_port:upper>])].clone()
           ).into()
       })}
     }

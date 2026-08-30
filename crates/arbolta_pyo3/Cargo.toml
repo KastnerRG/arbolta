@@ -18,8 +18,8 @@ anyhow = "*"
 arbolta = { workspace = true, features = ["pyo3"] }
 flexbuffers = { workspace = true }
 num-traits = { workspace = true }
-numpy = "0.27"
+numpy = "0.29"
 petgraph = { workspace = true }
-pyo3 = { version = "0.27", features = ["anyhow"] }
+pyo3 = { workspace = true, features = ["anyhow"] }
 serde = { workspace = true }
 thiserror = { workspace = true }

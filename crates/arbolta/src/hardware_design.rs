@@ -14,7 +14,7 @@ use std::{collections::HashMap, fmt::Debug};
 use thiserror::Error;
 
 #[derive(Default, Clone, Debug, Deserialize, Serialize)]
-pub struct HardwareModule {
+pub struct HardwareDesign {
   pub netlist: NetlistWrapper,
   pub signals: Signals,
   pub cells: Box<[Cell]>,
@@ -25,7 +25,7 @@ pub struct HardwareModule {
 
 // TODO: Refactor these
 #[derive(Debug, Error)]
-pub enum ModuleError {
+pub enum DesignError {
   #[error("Missing top module")]
   TopModule,
   #[error("Cell `{0}` doesn't exist")]
@@ -63,11 +63,11 @@ pub enum ToggleCount {
   Total,
 }
 
-impl HardwareModule {
+impl HardwareDesign {
   pub fn new(
     netlist: NetlistWrapper,
     cell_mapping: Option<&CellMapping>,
-  ) -> Result<HardwareModule, ModuleError> {
+  ) -> Result<HardwareDesign, DesignError> {
     let cells = netlist.build_cells(cell_mapping)?;
 
     let global_net_max: usize = netlist
@@ -110,9 +110,9 @@ impl HardwareModule {
     }
   }
 
-  pub fn eval_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
+  pub fn eval_clocked(&mut self, cycles: Option<u32>) -> Result<(), DesignError> {
     let Some((clock_net, polarity)) = self.clock_net else {
-      return Err(ModuleError::MissingClock);
+      return Err(DesignError::MissingClock);
     };
 
     let cycles = cycles.unwrap_or(1);
@@ -128,9 +128,9 @@ impl HardwareModule {
     Ok(())
   }
 
-  pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> Result<(), ModuleError> {
+  pub fn eval_reset_clocked(&mut self, cycles: Option<u32>) -> Result<(), DesignError> {
     let Some((reset_net, polarity)) = self.reset_net else {
-      return Err(ModuleError::MissingReset);
+      return Err(DesignError::MissingReset);
     };
 
     self.signals.set_net(reset_net, polarity);
@@ -141,9 +141,9 @@ impl HardwareModule {
     Ok(())
   }
 
-  pub fn set_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
+  pub fn set_signal(&mut self, net: usize, value: Bit) -> Result<(), DesignError> {
     if net >= self.signals.size {
-      Err(ModuleError::MissingNet(net))
+      Err(DesignError::MissingNet(net))
     } else {
       self.signals.set_net(net, value);
 
@@ -151,17 +151,17 @@ impl HardwareModule {
     }
   }
 
-  pub fn get_signal(&self, net: usize) -> Result<Bit, ModuleError> {
+  pub fn get_signal(&self, net: usize) -> Result<Bit, DesignError> {
     if net >= self.signals.size {
-      Err(ModuleError::MissingNet(net))
+      Err(DesignError::MissingNet(net))
     } else {
       Ok(self.signals.get_net(net))
     }
   }
 
-  pub fn toggle_signal(&mut self, net: usize) -> Result<(), ModuleError> {
+  pub fn toggle_signal(&mut self, net: usize) -> Result<(), DesignError> {
     if net >= self.signals.size {
-      Err(ModuleError::MissingNet(net))
+      Err(DesignError::MissingNet(net))
     } else {
       self.signals.toggle_net(net);
 
@@ -169,26 +169,26 @@ impl HardwareModule {
     }
   }
 
-  pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<(), ModuleError> {
+  pub fn stick_signal(&mut self, net: usize, value: Bit) -> Result<(), DesignError> {
     if net >= self.signals.size {
-      Err(ModuleError::MissingNet(net))
+      Err(DesignError::MissingNet(net))
     } else {
       Ok(self.signals.set_constant(net, value)?)
     }
   }
 
-  pub fn unstick_signal(&mut self, net: usize) -> Result<(), ModuleError> {
+  pub fn unstick_signal(&mut self, net: usize) -> Result<(), DesignError> {
     if net >= self.signals.size {
-      Err(ModuleError::MissingNet(net))
+      Err(DesignError::MissingNet(net))
     } else {
       Ok(self.signals.unset_constant(net)?)
     }
   }
 
   // TODO: Fix
-  pub fn get_net_bits(&self, name: &str) -> Result<BitVec, ModuleError> {
+  pub fn get_net_bits(&self, name: &str) -> Result<BitVec, DesignError> {
     let Some(nets) = self.get_net(name) else {
-      return Err(ModuleError::MissingPort(name.to_string()));
+      return Err(DesignError::MissingPort(name.to_string()));
     };
 
     let bits = BitVec::from_iter(nets.iter().map(|&n| self.signals.get_net(n)));
@@ -199,56 +199,56 @@ impl HardwareModule {
     self.netlist.names_to_nets.get(name).map(|v| &**v)
   }
 
-  pub fn set_clock(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
+  pub fn set_clock(&mut self, net: usize, polarity: Bit) -> Result<(), DesignError> {
     if net >= self.signals.size {
-      Err(ModuleError::MissingNet(net))
+      Err(DesignError::MissingNet(net))
     } else if let Some((reset_net, _)) = self.reset_net
       && reset_net == net
     {
-      Err(ModuleError::DoubleAssign)
+      Err(DesignError::DoubleAssign)
     } else {
       self.clock_net = Some((net, polarity));
       Ok(())
     }
   }
 
-  pub fn set_reset(&mut self, net: usize, polarity: Bit) -> Result<(), ModuleError> {
+  pub fn set_reset(&mut self, net: usize, polarity: Bit) -> Result<(), DesignError> {
     if net >= self.signals.size {
-      Err(ModuleError::MissingNet(net))
+      Err(DesignError::MissingNet(net))
     } else if let Some((clock_net, _)) = self.clock_net
       && clock_net == net
     {
-      Err(ModuleError::DoubleAssign)
+      Err(DesignError::DoubleAssign)
     } else {
       self.reset_net = Some((net, polarity));
       Ok(())
     }
   }
 
-  pub fn set_port_shape(&mut self, name: &str, shape: &[usize; 2]) -> Result<(), ModuleError> {
+  pub fn set_port_shape(&mut self, name: &str, shape: &[usize; 2]) -> Result<(), DesignError> {
     match self.ports.get_mut(name) {
       Some(port) => Ok(port.set_shape(shape)?),
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      None => Err(DesignError::MissingPort(name.to_string())),
     }
   }
 
-  pub fn get_port_shape(&self, name: &str) -> Result<[usize; 2], ModuleError> {
+  pub fn get_port_shape(&self, name: &str) -> Result<[usize; 2], DesignError> {
     match self.ports.get(name) {
       Some(port) => Ok(port.get_shape()),
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      None => Err(DesignError::MissingPort(name.to_string())),
     }
   }
 
-  pub fn get_port_direction(&self, name: &str) -> Result<PortDirection, ModuleError> {
+  pub fn get_port_direction(&self, name: &str) -> Result<PortDirection, DesignError> {
     match self.ports.get(name) {
       Some(port) => Ok(port.direction.clone()),
-      None => Err(ModuleError::MissingPort(name.to_string())),
+      None => Err(DesignError::MissingPort(name.to_string())),
     }
   }
 
-  pub fn get_port(&self, name: &str) -> Result<BitVec, ModuleError> {
+  pub fn get_port(&self, name: &str) -> Result<BitVec, DesignError> {
     let (Some(port), Some(nets)) = (self.ports.get(name), self.get_net(name)) else {
-      return Err(ModuleError::MissingPort(name.to_string()));
+      return Err(DesignError::MissingPort(name.to_string()));
     };
 
     let mut bits = BitVec::from_iter(nets.iter().map(|&n| self.signals.get_net(n)));
@@ -257,7 +257,7 @@ impl HardwareModule {
     Ok(bits)
   }
 
-  pub fn set_port<I, B>(&mut self, name: &str, vals: I) -> Result<(), ModuleError>
+  pub fn set_port<I, B>(&mut self, name: &str, vals: I) -> Result<(), DesignError>
   where
     I: IntoIterator<Item = B>,
     B: Into<Bit>,
@@ -280,11 +280,11 @@ impl HardwareModule {
 
       Ok(())
     } else {
-      Err(ModuleError::MissingPort(name.to_string()))
+      Err(DesignError::MissingPort(name.to_string()))
     }
   }
 
-  pub fn toggle_port(&mut self, name: &str) -> Result<(), ModuleError> {
+  pub fn toggle_port(&mut self, name: &str) -> Result<(), DesignError> {
     let Self {
       signals,
       netlist,
@@ -302,7 +302,7 @@ impl HardwareModule {
 
       Ok(())
     } else {
-      Err(ModuleError::MissingPort(name.to_string()))
+      Err(DesignError::MissingPort(name.to_string()))
     }
   }
 

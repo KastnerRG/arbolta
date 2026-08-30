@@ -24,7 +24,7 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 paste = "1.0.15"
 petgraph = { workspace = true }
-pyo3 = { version = "0.27", optional = true }
+pyo3 = { workspace = true, optional = true }
 rstest = { workspace = true }
 serde = { workspace = true }
 serde_json = "1.0.145"

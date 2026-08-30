@@ -3,7 +3,7 @@
 
 use crate::{
   cell::{Cell, CellMapping, create_cell},
-  hardware_module::ModuleError,
+  hardware_design::DesignError,
   port::{Port, PortDirection, parse_bit},
   yosys::{self, Netlist, RTLID, TopoOrder},
 };
@@ -31,19 +31,19 @@ impl NetlistWrapper {
     netlist: Netlist,
     torder: TopoOrder,
     hierarchy_separator: Option<&str>,
-  ) -> Result<Self, ModuleError> {
+  ) -> Result<Self, DesignError> {
     let mut netlist = netlist;
 
     let top_module = top_module
       .or(find_top_module_name(&netlist))
-      .ok_or(ModuleError::TopModule)?
+      .ok_or(DesignError::TopModule)?
       .to_string();
     let module = netlist.modules.get_mut(&top_module).unwrap();
 
     let torder_cells = IndexSet::<&str>::from_iter(
       torder
         .get(top_module.as_str())
-        .ok_or(ModuleError::TopModule)?
+        .ok_or(DesignError::TopModule)?
         .clone(),
     );
     // Rearrange cells in topological order, put $scopeinfo at end
@@ -77,7 +77,7 @@ impl NetlistWrapper {
   pub fn find_module_ports<S: AsRef<str>>(
     &self,
     parents: Option<&[S]>,
-  ) -> Result<HashMap<String, Port>, ModuleError> {
+  ) -> Result<HashMap<String, Port>, DesignError> {
     let parents: Vec<&str> = match parents {
       Some(p) => p.iter().map(|s| s.as_ref()).collect(),
       None => vec![self.top_module.as_ref()],
@@ -88,7 +88,7 @@ impl NetlistWrapper {
       .netlist
       .modules
       .get(&parents.join("."))
-      .ok_or(ModuleError::MissingModule)?;
+      .ok_or(DesignError::MissingModule)?;
 
     let mut ports = HashMap::new();
     for (port_name, port_info) in &module.ports {
@@ -105,10 +105,10 @@ impl NetlistWrapper {
     module.cells.get(&id.to_string())
   }
 
-  fn build_cell(&self, cell: &RTLID, mapping: Option<&CellMapping>) -> Result<Cell, ModuleError> {
+  fn build_cell(&self, cell: &RTLID, mapping: Option<&CellMapping>) -> Result<Cell, DesignError> {
     let synth_cell = self
       .find_cell(cell)
-      .ok_or(ModuleError::MissingCell(cell.to_string()))?;
+      .ok_or(DesignError::MissingCell(cell.to_string()))?;
 
     let mut connections = BTreeMap::new();
     for (port_name, bits) in &synth_cell.connections {
@@ -135,7 +135,7 @@ impl NetlistWrapper {
     )?)
   }
 
-  pub fn build_cells(&self, mapping: Option<&CellMapping>) -> Result<Vec<Cell>, ModuleError> {
+  pub fn build_cells(&self, mapping: Option<&CellMapping>) -> Result<Vec<Cell>, DesignError> {
     let cells = self
       .cells
       .iter()
@@ -146,7 +146,7 @@ impl NetlistWrapper {
   }
 
   // CLEAN
-  pub fn build_graph(&self) -> Result<NetlistGraph, ModuleError> {
+  pub fn build_graph(&self) -> Result<NetlistGraph, DesignError> {
     let mut graph = NetlistGraph::new();
     let mut cell_nodes = BTreeMap::<&RTLID, NodeIndex>::new();
     let mut bit_drivers = BTreeMap::<usize, HashSet<&RTLID>>::new();
@@ -226,7 +226,7 @@ pub type NetlistGraph = DiGraph<RTLID, usize>;
 fn parse_cells(
   module: &mut yosys::Module,
   hierarchy_separator: Option<&str>,
-) -> Result<(Vec<RTLID>, Vec<Vec<String>>), ModuleError> {
+) -> Result<(Vec<RTLID>, Vec<Vec<String>>), DesignError> {
   let mut scope_cells = vec![];
   let mut primitive_cells = vec![];
 
@@ -281,7 +281,7 @@ fn parse_cells(
 fn parse_nets(
   module: &mut yosys::Module,
   hierarchy_separator: Option<&str>,
-) -> Result<HashMap<RTLID, Box<[usize]>>, ModuleError> {
+) -> Result<HashMap<RTLID, Box<[usize]>>, DesignError> {
   let mut all_nets = HashMap::new();
 
   let mut new_nets = indexmap! {};

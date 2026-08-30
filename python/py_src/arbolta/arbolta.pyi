@@ -2,13 +2,34 @@
 # SPDX-License-Identifier: MIT
 
 from os import PathLike
-from typing import Any, Optional
+from typing import Any, Optional, overload
 
 import numpy as np
 from networkx import DiGraph
 from numpy.typing import ArrayLike
 
 from . import Bit, CellMapping, PortConfig
+
+class Signal:
+    """
+    Access to design net
+    """
+
+    net: int
+    value: Bit
+    constant: bool
+    toggles_rising: int
+    toggles_falling: int
+
+class Signals:
+    """
+    Access to design signals
+    """
+    @overload
+    def __getitem__(self, net: int) -> Signal: ...
+    @overload
+    def __getitem__(self, net_name: str) -> list[Signal]: ...
+    def __len__(self) -> int: ...
 
 # TODO: Add `raises` docs
 class Ports:
@@ -60,6 +81,7 @@ class HardwareDesign:
 
     top_module: str
     ports: Ports
+    signals: Signals
     modules: list[str]
     config: dict[str, PortConfig]
 

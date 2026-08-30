@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Alexander Redding
 // SPDX-License-Identifier: MIT
 
-use crate::hardware_module::HardwareDesign;
+use crate::hardware_design::HardwareDesign;
 use arbolta::{bit::Bit, port::PortDirection};
 use pyo3::{
   exceptions::{PyAttributeError, PyValueError},
@@ -11,18 +11,18 @@ use pyo3::{
 use std::collections::{HashMap, HashSet};
 
 // Treat as a dataclass
-#[derive(Debug, FromPyObject, IntoPyObject)]
+#[derive(Debug, FromPyObject)]
 pub struct PortConfig {
   pub shape: (usize, usize), // Defaults (1,1)
   pub dtype: Py<PyAny>,      // Numpy datatype, defaults to np.uint ('<u8')
   pub clock: bool,
   pub reset: bool,
-  pub polarity: Option<u8>, // Literal [0, 1]
+  pub polarity: Option<Bit>, // Literal [0, 1]
 }
 
 #[pyclass(dict)]
 pub struct Ports {
-  module: Py<HardwareDesign>,
+  design: Py<HardwareDesign>,
   input_ports: HashSet<String>,
   output_ports: HashSet<String>,
 }
@@ -57,7 +57,7 @@ impl Ports {
     np.getattr("copyto")?.call1((&buffer_ref, value))?;
 
     binding
-      .module
+      .design
       .borrow_mut(py)
       .set_port_numpy(name, &buffer_ref)?;
 
@@ -78,19 +78,23 @@ impl Ports {
     // Update
     if binding.output_ports.contains(name) {
       binding
-        .module
+        .design
         .borrow_mut(py)
         .get_port_numpy(name, &buffer_ref)?;
     }
 
     Ok(buffer_ref.into())
   }
+
+  fn __repr__(self_: Bound<'_, Self>) -> PyResult<Bound<'_, PyAny>> {
+    self_.getattr("__dict__")?.call_method0("__repr__")
+  }
 }
 
 impl Ports {
-  fn new_base(module: Py<HardwareDesign>) -> Self {
+  fn new_base(design: Py<HardwareDesign>) -> Self {
     Self {
-      module,
+      design,
       input_ports: Default::default(),
       output_ports: Default::default(),
     }
@@ -99,18 +103,18 @@ impl Ports {
   pub fn new(
     py: Python<'_>,
     config: &HashMap<String, PortConfig>,
-    module: Py<HardwareDesign>,
+    design: Py<HardwareDesign>,
   ) -> anyhow::Result<Py<Self>> {
     let np = py.import("numpy")?;
-    let module_ref = &mut module.bind(py).borrow_mut().inner;
+    let design_ref = &mut design.bind(py).borrow_mut().inner;
 
-    let new_self = Py::new(py, Self::new_base(module))?;
+    let new_self = Py::new(py, Self::new_base(design))?;
     let temp_binding = new_self.getattr(py, "__dict__")?;
     let ports = temp_binding.cast_bound::<PyDict>(py).unwrap();
 
     let binding = &mut new_self.bind(py).borrow_mut();
 
-    let port_names: HashSet<String> = module_ref.ports.keys().cloned().collect();
+    let port_names: HashSet<String> = design_ref.ports.keys().cloned().collect();
 
     // Check for invalid ports in config
     for port_name in config.keys() {
@@ -120,15 +124,14 @@ impl Ports {
     }
 
     for port_name in port_names {
-      let direction = module_ref.get_port_direction(&port_name)?;
+      let direction = design_ref.get_port_direction(&port_name)?;
       let kwargs = PyDict::new(py);
       let buffer_len: usize;
 
       if let Some(port_config) = config.get(&port_name) {
         if port_config.reset || port_config.clock {
           if let Some(polarity) = port_config.polarity {
-            let polarity = Bit::from_int(polarity)?;
-            let nets = module_ref
+            let nets = design_ref
               .get_net(&port_name)
               .ok_or(PyAttributeError::new_err(format!("No net `{port_name}`")))?;
 
@@ -138,11 +141,11 @@ impl Ports {
 
             let net = *nets.first().unwrap();
             if port_config.reset {
-              module_ref.set_reset(net, polarity)?;
+              design_ref.set_reset(net, polarity)?;
             }
 
             if port_config.clock {
-              module_ref.set_clock(net, polarity)?;
+              design_ref.set_clock(net, polarity)?;
             }
           } else {
             return Err(PyValueError::new_err("No polarity given".to_string()).into());
@@ -155,17 +158,17 @@ impl Ports {
           return Err(PyValueError::new_err(format!("Only 1D shapes supported: {shape:?}")).into());
         }
 
-        let internal_shape = module_ref.get_port_shape(&port_name)?;
+        let internal_shape = design_ref.get_port_shape(&port_name)?;
         let num_bits = internal_shape[0] * internal_shape[1];
         let (num_elems, elem_size) = (shape[1], num_bits / shape[1]);
-        module_ref.set_port_shape(&port_name, &[num_elems, elem_size])?;
+        design_ref.set_port_shape(&port_name, &[num_elems, elem_size])?;
 
         kwargs.set_item("dtype", port_config.dtype.bind(py))?;
         buffer_len = num_elems;
       // No config given
       } else {
         kwargs.set_item("dtype", np.getattr("uint")?)?;
-        buffer_len = module_ref.get_port_shape(&port_name)?[0];
+        buffer_len = design_ref.get_port_shape(&port_name)?[0];
       }
 
       let buffer = np.getattr("zeros")?.call((buffer_len,), Some(&kwargs))?;

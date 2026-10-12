@@ -15,10 +15,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "*"
-arbolta = { workspace = true }
+arbolta = { workspace = true, features = ["pyo3"] }
+flexbuffers = { workspace = true }
 num-traits = { workspace = true }
 numpy = "0.27"
 petgraph = { workspace = true }
 pyo3 = { version = "0.27", features = ["anyhow"] }
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 thiserror = { workspace = true }

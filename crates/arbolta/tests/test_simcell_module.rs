@@ -2,11 +2,12 @@
 // Copyright (c) 2026 Alexander Redding
 // SPDX-License-Identifier: MIT
 
-use arbolta::{bit::BitVec, hardware_module::HardwareModule};
+use arbolta::{
+  bit::BitVec, hardware_module::HardwareModule, netlist_wrapper::NetlistWrapper, yosys::Netlist,
+};
 use once_cell::sync::Lazy;
 use rstest::rstest;
 use std::collections::HashMap;
-use yosys_netlist_json::Netlist;
 
 static CELL_WRAPPER_NETLIST: Lazy<Netlist> =
   Lazy::new(|| Netlist::from_slice(include_bytes!("deps/simcells_wrappers.json")).unwrap());
@@ -23,8 +24,10 @@ static CELL_WRAPPER_NETLIST: Lazy<Netlist> =
 fn test_module_unary_cell(#[case] cell: &str, #[case] cases: [(u8, u8); 2]) {
   let cell_type = cell.strip_suffix("_WRAPPER").unwrap();
   let torder = HashMap::from([(cell, vec![cell_type])]);
-  let mut module =
-    HardwareModule::new(CELL_WRAPPER_NETLIST.clone(), Some(cell), torder, None, None).unwrap();
+
+  let netlist_wrapper =
+    NetlistWrapper::new(Some(cell), CELL_WRAPPER_NETLIST.clone(), torder, None).unwrap();
+  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
 
   for (a, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
@@ -80,8 +83,10 @@ fn test_module_unary_cell(#[case] cell: &str, #[case] cases: [(u8, u8); 2]) {
 fn test_module_binary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8); 4]) {
   let cell_type = cell.strip_suffix("_WRAPPER").unwrap();
   let torder = HashMap::from([(cell, vec![cell_type])]);
-  let mut module =
-    HardwareModule::new(CELL_WRAPPER_NETLIST.clone(), Some(cell), torder, None, None).unwrap();
+
+  let netlist_wrapper =
+    NetlistWrapper::new(Some(cell), CELL_WRAPPER_NETLIST.clone(), torder, None).unwrap();
+  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
 
   for (a, b, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
@@ -116,8 +121,9 @@ fn test_module_binary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8); 4])
 fn test_module_ternary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8); 8]) {
   let cell_type = cell.strip_suffix("_WRAPPER").unwrap();
   let torder = HashMap::from([(cell, vec![cell_type])]);
-  let mut module =
-    HardwareModule::new(CELL_WRAPPER_NETLIST.clone(), Some(cell), torder, None, None).unwrap();
+  let netlist_wrapper =
+    NetlistWrapper::new(Some(cell), CELL_WRAPPER_NETLIST.clone(), torder, None).unwrap();
+  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
 
   for (a, b, c, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
@@ -153,8 +159,9 @@ fn test_module_ternary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8)
 fn test_module_mux_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8); 8]) {
   let cell_type = cell.strip_suffix("_WRAPPER").unwrap();
   let torder = HashMap::from([(cell, vec![cell_type])]);
-  let mut module =
-    HardwareModule::new(CELL_WRAPPER_NETLIST.clone(), Some(cell), torder, None, None).unwrap();
+  let netlist_wrapper =
+    NetlistWrapper::new(Some(cell), CELL_WRAPPER_NETLIST.clone(), torder, None).unwrap();
+  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
 
   for (a, b, s, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();

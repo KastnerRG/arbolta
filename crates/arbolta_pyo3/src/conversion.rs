@@ -7,6 +7,7 @@ use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingSub};
 use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 
+// TODO: Just use BitVec IntoPyObject trait
 pub fn bits_to_bool_numpy(bits: &BitVec, numpy_array: &Bound<'_, PyAny>) -> PyResult<()> {
   let mut buffer = numpy_array.extract::<PyReadwriteArray1<bool>>()?;
 

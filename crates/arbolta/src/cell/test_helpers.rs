@@ -1,15 +1,18 @@
 // Copyright (c) 2026 Alexander Redding
 // SPDX-License-Identifier: MIT
 
-use crate::bit::BitVec;
+use crate::{bit::BitVec, signal::Signals};
+
+#[allow(unused)]
+pub const NET_OFFSET: usize = Signals::NET_CONST1 + 1;
 
 #[macro_export]
 macro_rules! make_unary_wires {
   ($a:expr, $y:expr) => {{
     let a_size = $a.bits.len();
     let y_size = $y.bits.len();
-    let a_nets: Vec<usize> = (0..a_size).collect();
-    let y_nets: Vec<usize> = (a_size..a_size + y_size).collect();
+    let a_nets: Vec<usize> = (0..a_size).map(|n| n + NET_OFFSET).collect();
+    let y_nets: Vec<usize> = (a_size..a_size + y_size).map(|n| n + NET_OFFSET).collect();
     (a_nets, y_nets)
   }};
 }
@@ -23,9 +26,11 @@ macro_rules! make_binary_wires {
     let a_size = $a.bits.len();
     let b_size = $b.bits.len();
     let y_size = $y.bits.len();
-    let a_nets: Vec<usize> = (0..a_size).collect();
-    let b_nets: Vec<usize> = (a_size..a_size + b_size).collect();
-    let y_nets: Vec<usize> = (a_size + b_size..a_size + b_size + y_size).collect();
+    let a_nets: Vec<usize> = (0..a_size).map(|n| n + NET_OFFSET).collect();
+    let b_nets: Vec<usize> = (a_size..a_size + b_size).map(|n| n + NET_OFFSET).collect();
+    let y_nets: Vec<usize> = (a_size + b_size..a_size + b_size + y_size)
+      .map(|n| n + NET_OFFSET)
+      .collect();
     (a_nets, b_nets, y_nets)
   }};
 }

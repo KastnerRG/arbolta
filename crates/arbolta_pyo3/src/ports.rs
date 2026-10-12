@@ -11,45 +11,13 @@ use pyo3::{
 use std::collections::{HashMap, HashSet};
 
 // Treat as a dataclass
-#[pyclass]
+#[derive(Debug, FromPyObject, IntoPyObject)]
 pub struct PortConfig {
-  #[pyo3(get, set)]
   pub shape: (usize, usize), // Defaults (1,1)
-  #[pyo3(get, set)]
-  pub dtype: Py<PyAny>, // Numpy datatype, defaults to np.uint
-  #[pyo3(get, set)]
+  pub dtype: Py<PyAny>,      // Numpy datatype, defaults to np.uint ('<u8')
   pub clock: bool,
-  #[pyo3(get, set)]
   pub reset: bool,
-  #[pyo3(get, set)]
   pub polarity: Option<u8>, // Literal [0, 1]
-}
-
-#[pymethods]
-impl PortConfig {
-  #[new]
-  #[pyo3(signature = (shape=(1,1), dtype=None, clock=false, reset=false, polarity=None))]
-  fn new(
-    py: Python<'_>,
-    shape: (usize, usize),
-    dtype: Option<Py<PyAny>>,
-    clock: bool,
-    reset: bool,
-    polarity: Option<u8>,
-  ) -> PyResult<Self> {
-    let dtype = match dtype {
-      Some(d) => d,
-      None => py.import("numpy")?.getattr("uint")?.into(),
-    };
-
-    Ok(Self {
-      shape,
-      dtype,
-      clock,
-      reset,
-      polarity,
-    })
-  }
 }
 
 #[pyclass(dict)]
@@ -130,11 +98,11 @@ impl Ports {
 
   pub fn new(
     py: Python<'_>,
-    config: HashMap<String, PyRef<PortConfig>>,
+    config: &HashMap<String, PortConfig>,
     module: Py<HardwareDesign>,
   ) -> anyhow::Result<Py<Self>> {
     let np = py.import("numpy")?;
-    let module_ref = &mut module.bind(py).borrow_mut().module;
+    let module_ref = &mut module.bind(py).borrow_mut().inner;
 
     let new_self = Py::new(py, Self::new_base(module))?;
     let temp_binding = new_self.getattr(py, "__dict__")?;
@@ -142,7 +110,15 @@ impl Ports {
 
     let binding = &mut new_self.bind(py).borrow_mut();
 
-    let port_names: Vec<String> = module_ref.ports.keys().cloned().collect();
+    let port_names: HashSet<String> = module_ref.ports.keys().cloned().collect();
+
+    // Check for invalid ports in config
+    for port_name in config.keys() {
+      if !port_names.contains(port_name) {
+        return Err(PyValueError::new_err(format!("Port `{port_name}` doesn't exist")).into());
+      }
+    }
+
     for port_name in port_names {
       let direction = module_ref.get_port_direction(&port_name)?;
       let kwargs = PyDict::new(py);
@@ -180,8 +156,10 @@ impl Ports {
         }
 
         let internal_shape = module_ref.get_port_shape(&port_name)?;
-        let (num_elems, elem_size) = (shape[1], internal_shape[1] / shape[1]);
+        let num_bits = internal_shape[0] * internal_shape[1];
+        let (num_elems, elem_size) = (shape[1], num_bits / shape[1]);
         module_ref.set_port_shape(&port_name, &[num_elems, elem_size])?;
+
         kwargs.set_item("dtype", port_config.dtype.bind(py))?;
         buffer_len = num_elems;
       // No config given

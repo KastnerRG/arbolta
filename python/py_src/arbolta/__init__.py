@@ -12,7 +12,7 @@ from .arbolta import HardwareDesign, Ports
 __all__ = ["HardwareDesign", "Ports", "PortConfig", "CellMapping", "Bit"]
 
 type CellMapping = dict[str, tuple[str, Optional[dict[str, str]]]]
-type Bit = Literal[0, 1]
+type Bit = Literal[0, 1] | bool
 
 
 @dataclass

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 use arbolta::{
-  bit::BitVec, hardware_module::HardwareModule, netlist_wrapper::NetlistWrapper, yosys::Netlist,
+  bit::BitVec, hardware_design::HardwareDesign, netlist_wrapper::NetlistWrapper, yosys::Netlist,
 };
 use once_cell::sync::Lazy;
 use rstest::rstest;
@@ -27,7 +27,7 @@ fn test_module_unary_cell(#[case] cell: &str, #[case] cases: [(u8, u8); 2]) {
 
   let netlist_wrapper =
     NetlistWrapper::new(Some(cell), CELL_WRAPPER_NETLIST.clone(), torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   for (a, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
@@ -86,7 +86,7 @@ fn test_module_binary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8); 4])
 
   let netlist_wrapper =
     NetlistWrapper::new(Some(cell), CELL_WRAPPER_NETLIST.clone(), torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   for (a, b, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
@@ -123,7 +123,7 @@ fn test_module_ternary_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8)
   let torder = HashMap::from([(cell, vec![cell_type])]);
   let netlist_wrapper =
     NetlistWrapper::new(Some(cell), CELL_WRAPPER_NETLIST.clone(), torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   for (a, b, c, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();
@@ -161,7 +161,7 @@ fn test_module_mux_cell(#[case] cell: &str, #[case] cases: [(u8, u8, u8, u8); 8]
   let torder = HashMap::from([(cell, vec![cell_type])]);
   let netlist_wrapper =
     NetlistWrapper::new(Some(cell), CELL_WRAPPER_NETLIST.clone(), torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   for (a, b, s, expected) in cases {
     module.set_port("A", BitVec::from_int(a, None)).unwrap();

@@ -13,6 +13,9 @@ use std::{
 };
 use thiserror::Error;
 
+#[cfg(feature = "pyo3")]
+use pyo3::{exceptions::PyValueError, prelude::*};
+
 /// Primitive signal value
 #[repr(transparent)]
 #[derive(
@@ -31,8 +34,23 @@ use thiserror::Error;
   BitXor,
   Not,
 )]
-#[cfg_attr(feature = "pyo3", derive(pyo3::IntoPyObject))]
+#[cfg_attr(feature = "pyo3", derive(IntoPyObject))]
 pub struct Bit(#[debug("{}", if *_0 {"1"} else {"0"})] pub bool);
+
+#[cfg(feature = "pyo3")]
+impl<'a, 'py> FromPyObject<'a, 'py> for Bit {
+  type Error = PyErr;
+
+  fn extract(obj: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+    if let Ok(value) = obj.extract::<bool>() {
+      Ok(Bit(value))
+    } else if let Ok(value) = obj.extract::<i64>() {
+      Ok(Self::from_int(value).map_err(|e| PyValueError::new_err(format!("{e}")))?)
+    } else {
+      Err(PyValueError::new_err("Unsupported bit value"))
+    }
+  }
+}
 
 #[derive(Debug, PartialEq, Eq, Error)]
 #[error("Couldn't convert `{0}` to a Bit, must be 0 or 1")]

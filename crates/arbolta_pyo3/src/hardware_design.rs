@@ -5,11 +5,12 @@
 use crate::{
   conversion::{bits_to_bool_numpy, bits_to_int_numpy, bool_numpy_to_bits, int_numpy_to_bits},
   ports::{PortConfig, Ports},
+  signals::Signals,
 };
 use arbolta::{
   bit::Bit,
   cell::CellMapping,
-  hardware_module::{HardwareModule, ToggleCount},
+  hardware_design::{self, ToggleCount},
   netlist_wrapper::NetlistWrapper,
   port::{PortDirection, parse_bit},
   yosys::{self, Netlist},
@@ -30,7 +31,7 @@ pub struct HardwareDesign {
   pub top_module: String,
   #[pyo3(get)]
   pub modules: Vec<String>,
-  pub inner: HardwareModule,
+  pub inner: hardware_design::HardwareDesign,
 }
 
 impl HardwareDesign {
@@ -149,13 +150,13 @@ impl HardwareDesign {
     design: Option<Py<PyAny>>,
   ) -> anyhow::Result<Py<Self>> {
     // Deserialize
-    let hardware_module: HardwareModule = if let Some(design) = design {
+    let hardware_module: hardware_design::HardwareDesign = if let Some(design) = design {
       let data = design
         .extract::<&[u8]>(py)
         .map_err(|e| anyhow::anyhow!(format!("{e}")))?;
       let reader = flexbuffers::Reader::get_root(data)?;
 
-      HardwareModule::deserialize(reader)?
+      hardware_design::HardwareDesign::deserialize(reader)?
 
     // Actually parse
     } else if let Some(netlist) = netlist {
@@ -170,7 +171,7 @@ impl HardwareDesign {
 
       let netlist_wrapper = NetlistWrapper::new(top_module, netlist, torder, hierarchy_separator)?;
 
-      HardwareModule::new(netlist_wrapper, cell_mapping.as_ref())?
+      hardware_design::HardwareDesign::new(netlist_wrapper, cell_mapping.as_ref())?
     } else {
       return Err(PyValueError::new_err("Invalid arguments".to_string()).into());
     };
@@ -195,10 +196,14 @@ impl HardwareDesign {
     let dict_binding = py_module.getattr(py, "__dict__")?;
     let self_dict = dict_binding.cast_bound::<PyDict>(py).unwrap();
 
-    // Add ports field
+    // Add ports member
     let temp_config: HashMap<String, PortConfig> = config.extract(py)?;
-    let ports = Py::new(py, Ports::new(py, &temp_config, py_module.clone_ref(py))?)?;
+    let ports = Ports::new(py, &temp_config, py_module.clone_ref(py))?;
     self_dict.set_item("ports", ports)?;
+
+    // Add signals member
+    let signals = Signals::new(py, py_module.clone_ref(py))?;
+    self_dict.set_item("signals", signals)?;
 
     // Add config
     self_dict.set_item("config", config)?;
@@ -211,20 +216,6 @@ impl HardwareDesign {
     Ok(flexbuffers::from_slice(state.as_bytes())?)
   }
 
-  // pub fn __reduce_ex__<'py>(&self, py: Python<'py>, _protocol: i32) -> anyhow::Result<Py<PyAny>> {
-  //   let mut serializer = flexbuffers::FlexbufferSerializer::new();
-  //   self.serialize(&mut serializer)?;
-  //   let state = serializer.view();
-
-  //   let class = py.get_type::<Self>();
-  //   let callable = class.getattr("_from_pickle")?;
-
-  //   Ok(
-  //     (callable, (PyBytes::new(py, &state),))
-  //       .into_pyobject(py)?
-  //       .into(),
-  //   )
-  // }
   fn __getstate__(&self) -> Option<()> {
     None
   }
@@ -252,6 +243,10 @@ impl HardwareDesign {
     Ok((args, kwargs))
   }
 
+  fn __repr__(self_: Bound<'_, Self>) -> PyResult<Bound<'_, PyAny>> {
+    self_.getattr("__dict__")?.call_method0("__repr__")
+  }
+
   pub fn reset(&mut self) {
     self.inner.reset()
   }
@@ -270,8 +265,8 @@ impl HardwareDesign {
     Ok(self.inner.eval_reset_clocked(cycles)?)
   }
 
-  pub fn set_signal(&mut self, net: usize, val: u8) -> anyhow::Result<()> {
-    Ok(self.inner.set_signal(net, Bit::from_int(val)?)?)
+  pub fn set_signal(&mut self, net: usize, val: Bit) -> anyhow::Result<()> {
+    Ok(self.inner.set_signal(net, val)?)
   }
 
   pub fn get_signal(&mut self, net: usize) -> anyhow::Result<u8> {
@@ -283,8 +278,8 @@ impl HardwareDesign {
     Ok(self.inner.toggle_signal(net)?)
   }
 
-  pub fn stick_signal(&mut self, net: usize, val: u8) -> anyhow::Result<()> {
-    Ok(self.inner.stick_signal(net, Bit::from_int(val)?)?)
+  pub fn stick_signal(&mut self, net: usize, val: Bit) -> anyhow::Result<()> {
+    Ok(self.inner.stick_signal(net, val)?)
   }
 
   pub fn unstick_signal(&mut self, net: usize) -> anyhow::Result<()> {

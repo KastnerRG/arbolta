@@ -5,7 +5,7 @@ mod helpers;
 
 use arbolta::{
   bit::{Bit, BitVec},
-  hardware_module::HardwareModule,
+  hardware_design::HardwareDesign,
   netlist_wrapper::NetlistWrapper,
   yosys::PortDirection,
 };
@@ -55,7 +55,7 @@ fn test_add(#[case] signed: bool, #[case] a: BitVec, #[case] b: BitVec, #[case] 
   );
 
   let netlist_wrapper = NetlistWrapper::new(None, netlist, torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   module.set_port("A", a).unwrap();
   module.set_port("B", b).unwrap();
@@ -86,7 +86,7 @@ fn test_mux(#[case] select: Bit, #[case] a: BitVec, #[case] b: BitVec, #[case] e
   );
 
   let netlist_wrapper = NetlistWrapper::new(None, netlist, torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   module.set_port("S", [select]).unwrap();
   module.set_port("A", a).unwrap();
@@ -120,7 +120,7 @@ fn test_reg(#[case] polarity: Bit, #[case] data_in: BitVec) {
   );
 
   let netlist_wrapper = NetlistWrapper::new(None, netlist, torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   let clock_net = module.get_net("CLK").unwrap()[0];
   module.set_clock(clock_net, polarity).unwrap();
@@ -171,7 +171,7 @@ fn test_logic_and(#[case] a: BitVec, #[case] b: BitVec, #[case] expected: BitVec
   );
 
   let netlist_wrapper = NetlistWrapper::new(None, netlist, torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   module.set_port("A", a).unwrap();
   module.set_port("B", b).unwrap();
@@ -205,7 +205,7 @@ fn test_logic_not(#[case] a: BitVec, #[case] expected: BitVec) {
   );
 
   let netlist_wrapper = NetlistWrapper::new(None, netlist, torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   module.set_port("A", a).unwrap();
   module.eval();
@@ -237,7 +237,7 @@ fn test_reduce_or(#[case] a: BitVec, #[case] expected: BitVec) {
   );
 
   let netlist_wrapper = NetlistWrapper::new(None, netlist, torder, None).unwrap();
-  let mut module = HardwareModule::new(netlist_wrapper, None).unwrap();
+  let mut module = HardwareDesign::new(netlist_wrapper, None).unwrap();
 
   module.set_port("A", a).unwrap();
   module.eval();
